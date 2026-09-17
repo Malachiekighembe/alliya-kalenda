@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Alliya Kalenda — gestion de chantiers">
+  <meta name="theme-color" content="#0b2240">
+  <title>Alliya Kalenda</title>
+  <style>
+    :root {
+      color-scheme: light;
+    }
+    html, body { margin: 0; padding: 0; background: #f3f6f9; }
+    .loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh; font-family: system-ui, Segoe UI, Roboto, sans-serif;
+      color: #0b2240;
+    }
+  </style>
+  <script>
+    if (navigator.serviceWorker !== undefined) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('flutter_service_worker.js?v=321');
+      });
+    }
+  </script>
+</head>
+<body>
+  <div class="loading">Alliya Kalenda — chargement…</div>
+  <script src="main.dart.js" type="application/javascript"></script>
+</body>
+</html>
