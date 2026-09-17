@@ -24,7 +24,10 @@ jobs:
       - name: Build Flutter Web
         run: flutter build web --release --web-renderer html
 
-      - name: Deploy to Vercel branch
+      - name: Copy Vercel config to build
+        run: |
+          cp vercel.json build/web/
+          ls -la build/web/
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
