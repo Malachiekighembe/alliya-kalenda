@@ -1,9 +1,12 @@
-name: Build & Deploy Flutter Web to Vercel
-
+name: Deploy Flutter Web to Vercel
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-and-deploy:
@@ -15,19 +18,19 @@ jobs:
         with:
           flutter-version: '3.24.0'
 
-      - name: Enable Flutter Web
-        run: flutter config --enable-web
+      - run: flutter config --enable-web
 
-      - name: Get dependencies
-        run: flutter pub get
+      - run: flutter pub get
 
-      - name: Build Flutter Web
-        run: flutter build web --release --web-renderer html
+      - run: flutter build web --release
 
-      - name: Copy Vercel config to build
+      - name: Prepare Vercel deployment
         run: |
           cp vercel.json build/web/
+          echo "--- build/web contents ---"
           ls -la build/web/
+
+      - name: Deploy to Vercel via deploy branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
