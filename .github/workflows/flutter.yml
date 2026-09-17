@@ -1,10 +1,9 @@
-name: Vercel Deploy
+name: Build & Deploy Flutter Web to Vercel
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -15,25 +14,21 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
-          channel: stable
 
-      - name: Configure Flutter web
+      - name: Enable Flutter Web
         run: flutter config --enable-web
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze
+      - name: Build Flutter Web
+        run: flutter build web --release --web-renderer html
 
-      - name: Build web
-        run: flutter build web --release
-
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v20
+      - name: Deploy to Vercel branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
-          working-directory: .
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          branch: deploy
+          keep_files: true
+          commit_message: 'Deploy Flutter Web build [skip ci]'
