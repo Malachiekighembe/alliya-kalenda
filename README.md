@@ -22,8 +22,9 @@
 
 ## Plateformes
 
-Cibles actives : **Android** (mobile) et **Windows** (desktop).
-Le web n'est plus construit par Flutter : il sera porté par une application **Next.js** dédiée (même backend Supabase), donc aucun `flutter build web` ni config Vercel dans ce repo.
+Cibles actives : **Android** (mobile) et **Windows** (desktop) pour Flutter,
+plus une application **web Next.js** dans le sous-dossier `web/` (même backend
+Supabase). Aucun `flutter build web` ni config Vercel Flutter ici.
 
 ## Lancer
 
@@ -59,3 +60,4 @@ flutter test   # tests de widgets + tests de non-débordement (desktop & mobile)
 - `lib/features_pages.dart` : écrans de fonctionnalités.
 - `lib/messages_page.dart` : messagerie.
 - `supabase/migrations` : schéma SQL (projets, paiements, messages, stockage média).
+- `web/` : app web **Next.js 16** (voir `web/README.md`).

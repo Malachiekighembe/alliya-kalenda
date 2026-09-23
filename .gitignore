@@ -33,8 +33,7 @@ migrate_working_dir/
 /build/
 /coverage/
 
-# Flutter web build output (web is handled by the Next.js app, not Flutter)
-# Keep web/ sources out of builds; never commit build/web.
+# Next.js app lives in web/ (its own .gitignore handles node_modules, .next, .env)
 /web/.dart_tool/
 
 # Windows build outputs
