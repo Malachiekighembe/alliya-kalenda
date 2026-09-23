@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+/* Alliya Kalenda — design tokens (repris de lib/core/colors.dart Flutter) */
+:root {
+  --navy: #0b2240;
+  --accent: #2e6fd6;
+  --amber: #e8893c;
+  --app-background: #f3f6f9;
+  --card-border: #edf2f6;
+  --surface-high: #e8eef4;
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-accent: var(--accent);
+  --color-amber: var(--amber);
+  --color-app: var(--app-background);
+  --color-card-border: var(--card-border);
+  --color-surface-high: var(--surface-high);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--app-background);
+  color: #16202c;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
