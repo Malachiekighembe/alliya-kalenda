@@ -33,11 +33,27 @@ migrate_working_dir/
 /build/
 /coverage/
 
-# Symbolication related
-app.*.symbols
+# Flutter web build output (web is handled by the Next.js app, not Flutter)
+# Keep web/ sources out of builds; never commit build/web.
+/web/.dart_tool/
 
-# Obfuscation related
-app.*.map.json
+# Windows build outputs
+/windows/**/Debug/
+/windows/**/Release/
+/windows/**/Profile/
+/windows/**/x64/
+/windows/flutter/ephemeral/
+
+# Android build outputs
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/.gradle/
+/android/app/build/
+/android/build/
+
+# Release artifacts produced locally (APK / MSIX / zip)
+/release/
 
 # Android Studio will place build artifacts here
 /android/app/debug

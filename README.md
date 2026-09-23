@@ -20,12 +20,29 @@
 - `shared_preferences` (stockage local)
 - `google_fonts`, `intl`, `file_picker`, `connectivity_plus`
 
+## Plateformes
+
+Cibles actives : **Android** (mobile) et **Windows** (desktop).
+Le web n'est plus construit par Flutter : il sera porté par une application **Next.js** dédiée (même backend Supabase), donc aucun `flutter build web` ni config Vercel dans ce repo.
+
 ## Lancer
 
 ```sh
 flutter pub get
-flutter run -d windows   # ou android
+flutter run -d windows   # ou : flutter run -d android
 ```
+
+## Livrer (release locale)
+
+```sh
+flutter build apk --release
+# -> build/app/outputs/flutter-apk/app-release.apk
+
+flutter build windows --release
+# -> build/windows/x64/runner/Release/AlliyaKalenda.exe (+ dossier d'accompagnement)
+```
+
+Copiez ensuite les artefacts vers `release/` (ignoré par git) pour distribution manuelle.
 
 ## Tester & analyser
 

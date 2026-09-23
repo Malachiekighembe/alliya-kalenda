@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="alliya_kalenda"
+        android:label="Alliya Kalenda"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
