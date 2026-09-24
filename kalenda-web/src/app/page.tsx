@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { compactMoney, deadlineHint, formatDate, money } from "@/lib/format";
+import { deadlineHint, formatDate, money } from "@/lib/format";
 import {
   demoActivities,
   demoConversations,
@@ -8,24 +8,35 @@ import {
   demoTotalExpenses,
   projectStatusLabels,
 } from "@/lib/demo-data";
+import { Counter } from "@/components/counter";
+import { Progress } from "@/components/progress";
+import { Reveal } from "@/components/reveal";
 
 function StatCard({
   label,
   value,
+  format,
   hint,
+  delay,
 }: {
   label: string;
-  value: string;
+  value: number;
+  format: "int" | "money" | "compact";
   hint?: string;
+  delay: number;
 }) {
   return (
-    <div className="rounded-xl border border-card-border bg-white p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-navy/50">
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-extrabold text-navy">{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-navy/50">{hint}</p> : null}
-    </div>
+    <Reveal delay={delay}>
+      <article className="h-full rounded-xl border border-card-border bg-white p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-[0_10px_28px_-18px_rgba(11,34,64,0.45)]">
+        <p className="text-xs font-semibold uppercase tracking-wide text-navy/50">
+          {label}
+        </p>
+        <p className="mt-1 text-2xl font-extrabold text-navy">
+          <Counter value={value} format={format} />
+        </p>
+        {hint ? <p className="mt-0.5 text-xs text-navy/50">{hint}</p> : null}
+      </article>
+    </Reveal>
   );
 }
 
@@ -52,34 +63,42 @@ export default function DashboardPage() {
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Projets actifs"
-          value={String(activeProjects.length)}
+          value={activeProjects.length}
+          format="int"
           hint={`sur ${demoProjects.length} projets`}
+          delay={0}
         />
         <StatCard
           label="Encaissé"
-          value={compactMoney(totalReceived)}
+          value={totalReceived}
+          format="compact"
           hint="ce mois-ci"
+          delay={70}
         />
         <StatCard
           label="Dépenses"
-          value={compactMoney(demoTotalExpenses)}
+          value={demoTotalExpenses}
+          format="compact"
           hint="ce mois-ci"
+          delay={140}
         />
         <StatCard
           label="Activités"
-          value={String(demoActivities.length)}
+          value={demoActivities.length}
+          format="int"
           hint="prévues aujourd’hui"
+          delay={210}
         />
       </section>
 
-      {hero ? (
+      <Reveal delay={120}>
         <section className="relative overflow-hidden rounded-2xl bg-navy text-white">
           {/* Photo de chantier en fond (fallback dégradé navy si absente). */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={hero.imageUrl}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover opacity-60"
+            className="absolute inset-0 h-full w-full scale-100 object-cover opacity-60 transition-transform duration-700 hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/50 to-navy/10" />
           <div className="relative flex min-h-[200px] flex-col justify-end gap-1 p-5">
@@ -92,166 +111,177 @@ export default function DashboardPage() {
               {formatDate(new Date(hero.plannedEnd))} (
               {deadlineHint(new Date(hero.plannedEnd))})
             </p>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/25">
-              <div
-                className="h-full rounded-full bg-accent transition-all"
-                style={{ width: `${hero.progress}%` }}
-              />
-            </div>
+            <Progress
+              value={hero.progress}
+              className="mt-2 h-2 w-full rounded-full bg-white/25"
+            />
             <p className="mt-1 text-xs font-semibold text-white/80">
               {hero.progress}% · contrat {money(hero.contractAmount)}
             </p>
           </div>
         </section>
-      ) : null}
+      </Reveal>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <section className="rounded-xl border border-card-border bg-white p-4">
-          <h3 className="text-sm font-extrabold text-navy">
-            Activités du jour
-          </h3>
-          <ul className="mt-3 flex flex-col gap-3">
-            {demoActivities.map((activity) => (
-              <li key={activity.title} className="flex items-start gap-3">
-                <span className="mt-1 w-11 shrink-0 text-xs font-bold text-accent">
-                  {activity.time}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-navy">
-                    {activity.title}
-                  </p>
-                  <p className="text-xs text-navy/55">
-                    {activity.project} · {activity.status} · priorité{" "}
-                    {activity.priority.toLowerCase()}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-card-border bg-white p-4">
-          <h3 className="text-sm font-extrabold text-navy">
-            Progression des projets
-          </h3>
-          <ul className="mt-3 flex flex-col gap-3">
-            {demoProjects.slice(0, 4).map((project) => (
-              <li key={project.id} className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={project.imageUrl}
-                  alt=""
-                  className="h-9 w-9 shrink-0 rounded-lg object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
+        <Reveal delay={60}>
+          <section className="h-full rounded-xl border border-card-border bg-white p-4">
+            <h3 className="text-sm font-extrabold text-navy">
+              Activités du jour
+            </h3>
+            <ul className="mt-3 flex flex-col gap-3">
+              {demoActivities.map((activity) => (
+                <li key={activity.title} className="flex items-start gap-3">
+                  <span className="mt-1 w-11 shrink-0 text-xs font-bold text-accent">
+                    {activity.time}
+                  </span>
+                  <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-navy">
-                      {project.name}
+                      {activity.title}
                     </p>
-                    <span className="text-xs font-bold text-navy/60">
-                      {project.progress}%
-                    </span>
+                    <p className="text-xs text-navy/55">
+                      {activity.project} · {activity.status} · priorité{" "}
+                      {activity.priority.toLowerCase()}
+                    </p>
                   </div>
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-high">
-                    <div
-                      className="h-full rounded-full bg-accent"
-                      style={{ width: `${project.progress}%` }}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Reveal>
+
+        <Reveal delay={130}>
+          <section className="h-full rounded-xl border border-card-border bg-white p-4">
+            <h3 className="text-sm font-extrabold text-navy">
+              Progression des projets
+            </h3>
+            <ul className="mt-3 flex flex-col gap-3">
+              {demoProjects.slice(0, 4).map((project) => (
+                <li key={project.id} className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={project.imageUrl}
+                    alt=""
+                    className="h-9 w-9 shrink-0 rounded-lg object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-navy">
+                        {project.name}
+                      </p>
+                      <span className="text-xs font-bold text-navy/60">
+                        {project.progress}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={project.progress}
+                      className="mt-1 h-1.5 w-full rounded-full bg-surface-high"
                     />
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Link
-            href="/projets"
-            className="mt-3 inline-block text-xs font-bold text-accent hover:underline"
-          >
-            Voir tous les projets →
-          </Link>
-        </section>
-
-        <section className="rounded-xl border border-card-border bg-white p-4">
-          <h3 className="text-sm font-extrabold text-navy">
-            Échéances proches
-          </h3>
-          <ul className="mt-3 flex flex-col gap-3">
-            {upcoming.map((project) => (
-              <li
-                key={project.id}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <span className="truncate font-semibold text-navy">
-                  {project.name}
-                </span>
-                <span className="shrink-0 text-xs text-navy/55">
-                  {formatDate(new Date(project.plannedEnd))} ·{" "}
-                  {deadlineHint(new Date(project.plannedEnd))}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-card-border bg-white p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-navy">
-              Messages non lus
-            </h3>
+                </li>
+              ))}
+            </ul>
             <Link
-              href="/messages"
-              className="text-xs font-bold text-accent hover:underline"
+              href="/projets"
+              className="mt-3 inline-block text-xs font-bold text-accent hover:underline"
             >
-              Ouvrir
+              Voir tous les projets →
             </Link>
-          </div>
-          <ul className="mt-3 flex flex-col gap-3">
-            {demoConversations
-              .filter((conversation) => conversation.unread > 0)
-              .map((conversation) => (
-                <li key={conversation.id} className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-bold text-white">
-                    {conversation.initials}
+          </section>
+        </Reveal>
+
+        <Reveal delay={200}>
+          <section className="h-full rounded-xl border border-card-border bg-white p-4">
+            <h3 className="text-sm font-extrabold text-navy">
+              Échéances proches
+            </h3>
+            <ul className="mt-3 flex flex-col gap-3">
+              {upcoming.map((project) => (
+                <li
+                  key={project.id}
+                  className="flex items-center justify-between gap-3 rounded-lg px-1 py-0.5 text-sm transition-colors hover:bg-surface-low"
+                >
+                  <span className="truncate font-semibold text-navy">
+                    {project.name}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-navy">
-                      {conversation.title}
-                    </p>
-                    <p className="truncate text-xs text-navy/55">
-                      {conversation.subtitle}
-                    </p>
-                  </div>
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber px-1.5 text-[11px] font-bold text-white">
-                    {conversation.unread}
+                  <span className="shrink-0 text-xs text-navy/55">
+                    {formatDate(new Date(project.plannedEnd))} ·{" "}
+                    {deadlineHint(new Date(project.plannedEnd))}
                   </span>
                 </li>
               ))}
-          </ul>
-        </section>
+            </ul>
+          </section>
+        </Reveal>
+
+        <Reveal delay={270}>
+          <section className="h-full rounded-xl border border-card-border bg-white p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-navy">
+                Messages non lus
+              </h3>
+              <Link
+                href="/messages"
+                className="text-xs font-bold text-accent hover:underline"
+              >
+                Ouvrir
+              </Link>
+            </div>
+            <ul className="mt-3 flex flex-col gap-3">
+              {demoConversations
+                .filter((conversation) => conversation.unread > 0)
+                .map((conversation) => (
+                  <li
+                    key={conversation.id}
+                    className="flex items-center gap-3 rounded-lg px-1 py-0.5 transition-colors hover:bg-surface-low"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-bold text-white">
+                      {conversation.initials}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-navy">
+                        {conversation.title}
+                      </p>
+                      <p className="truncate text-xs text-navy/55">
+                        {conversation.subtitle}
+                      </p>
+                    </div>
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber px-1.5 text-[11px] font-bold text-white">
+                      {conversation.unread}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        </Reveal>
       </div>
 
-      <section className="rounded-xl border border-card-border bg-white p-4">
-        <h3 className="text-sm font-extrabold text-navy">Paiements récents</h3>
-        <ul className="mt-3 flex flex-col divide-y divide-card-border">
-          {demoPayments.map((payment) => (
-            <li
-              key={`${payment.project}-${payment.date}`}
-              className="flex items-center justify-between gap-3 py-2 text-sm"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-navy">
-                  {payment.project}
-                </p>
-                <p className="text-xs text-navy/55">
-                  {payment.date} · {payment.method}
-                </p>
-              </div>
-              <span className="shrink-0 font-bold text-navy">
-                {money(payment.amount)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Reveal delay={120}>
+        <section className="rounded-xl border border-card-border bg-white p-4">
+          <h3 className="text-sm font-extrabold text-navy">
+            Paiements récents
+          </h3>
+          <ul className="mt-3 flex flex-col divide-y divide-card-border">
+            {demoPayments.map((payment) => (
+              <li
+                key={`${payment.project}-${payment.date}`}
+                className="flex items-center justify-between gap-3 py-2 text-sm transition-colors hover:bg-surface-low"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-navy">
+                    {payment.project}
+                  </p>
+                  <p className="text-xs text-navy/55">
+                    {payment.date} · {payment.method}
+                  </p>
+                </div>
+                <span className="shrink-0 font-bold text-navy">
+                  {money(payment.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </Reveal>
     </div>
   );
 }
