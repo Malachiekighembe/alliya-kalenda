@@ -1,0 +1,20 @@
+# dependencies
+/node_modules
+
+# build
+/dist
+
+# env (copie .env.example → .env)
+.env
+.env.*
+!.env.example
+
+# logs / debug
+*.log
+npm-debug.log*
+
+# typescript
+*.tsbuildinfo
+
+# prisma
+prisma/*.db

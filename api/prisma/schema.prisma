@@ -1,0 +1,326 @@
+// Schéma Alliya Kalenda — aligné sur supabase/migrations/001 + 002.
+// La table `users` remplace auth.users (backend autonome, hors Supabase Auth).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  planned
+  active
+  paused
+  completed
+  cancelled
+}
+
+enum ActivityStatus {
+  todo
+  in_progress
+  completed
+}
+
+enum ActivityPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  profile        Profile?
+  projects       Project[]
+  people         Person[]
+  phases         Phase[]
+  activities     Activity[]
+  payments       Payment[]
+  expenses       Expense[]
+  materials      Material[]
+  reports        Report[]
+  attachments    Attachment[]
+  progressEvents ProgressEvent[]
+  conversations  Conversation[]
+  messages       Message[]
+
+  @@map("users")
+}
+
+model Profile {
+  id                 String   @id
+  user               User     @relation(fields: [id], references: [id], onDelete: Cascade)
+  fullName           String   @default("") @map("full_name")
+  companyName        String   @default("") @map("company_name")
+  phone              String   @default("")
+  currency           String   @default("USD")
+  dateFormat         String   @default("dd/MM/yyyy") @map("date_format")
+  notificationsEnabled Boolean @default(true) @map("notifications_enabled")
+  darkMode           Boolean  @default(false) @map("dark_mode")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("profiles")
+}
+
+model Project {
+  id             String        @id @default(uuid())
+  owner          User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId        String        @map("owner_id")
+  name           String
+  reference      String        @default("")
+  clientName     String        @default("") @map("client_name")
+  clientPhone    String        @default("") @map("client_phone")
+  location       String        @default("")
+  description    String        @default("")
+  startDate      DateTime?     @map("start_date") @db.Date
+  plannedEndDate DateTime?     @map("planned_end_date") @db.Date
+  actualEndDate  DateTime?     @map("actual_end_date") @db.Date
+  plannedBudget  Decimal       @default(0) @map("planned_budget") @db.Decimal(14, 2)
+  contractAmount Decimal       @default(0) @map("contract_amount") @db.Decimal(14, 2)
+  status         ProjectStatus @default(planned)
+  progress       Decimal       @default(0) @db.Decimal(5, 2)
+  notes          String        @default("")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  people         ProjectPerson[]
+  phases         Phase[]
+  activities     Activity[]
+  payments       Payment[]
+  expenses       Expense[]
+  materials      Material[]
+  reports        Report[]
+  attachments    Attachment[]
+  progressEvents ProgressEvent[]
+  conversations  Conversation[]
+  messages       Message[]
+
+  @@index([ownerId, status])
+  @@map("projects")
+}
+
+model Person {
+  id        String   @id @default(uuid())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String   @map("owner_id")
+  fullName  String   @map("full_name")
+  phone     String   @default("")
+  jobTitle  String   @default("") @map("job_title")
+  address   String   @default("")
+  photoPath String?  @map("photo_path")
+  notes     String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  projects   ProjectPerson[]
+  activities ActivityPerson[]
+
+  @@map("people")
+}
+
+model ProjectPerson {
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId  String   @map("project_id")
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String   @map("person_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  @@id([projectId, personId])
+  @@map("project_people")
+}
+
+model Phase {
+  id        String   @id @default(uuid())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String   @map("owner_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String   @map("project_id")
+  name      String
+  progress  Decimal  @default(0) @db.Decimal(5, 2)
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  activities Activity[]
+
+  @@index([projectId, position])
+  @@map("phases")
+}
+
+model Activity {
+  id           String           @id @default(uuid())
+  owner        User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId      String           @map("owner_id")
+  project      Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId    String?          @map("project_id")
+  phase        Phase?           @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  phaseId      String?          @map("phase_id")
+  title        String
+  description  String           @default("")
+  status       ActivityStatus   @default(todo)
+  priority     ActivityPriority @default(normal)
+  activityDate DateTime?        @map("activity_date") @db.Date
+  dueAt        DateTime?        @map("due_at")
+  notes        String           @default("")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  people ActivityPerson[]
+
+  @@index([ownerId, activityDate])
+  @@map("activities")
+}
+
+model ActivityPerson {
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activityId String   @map("activity_id")
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String   @map("person_id")
+
+  @@id([activityId, personId])
+  @@map("activity_people")
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId     String   @map("owner_id")
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String   @map("project_id")
+  amount      Decimal  @db.Decimal(14, 2)
+  paymentDate DateTime @map("payment_date") @db.Date
+  method      String   @default("")
+  notes       String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, paymentDate])
+  @@map("payments")
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId     String   @map("owner_id")
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String   @map("project_id")
+  label       String
+  category    String   @default("")
+  amount      Decimal  @db.Decimal(14, 2)
+  expenseDate DateTime @map("expense_date") @db.Date
+  notes       String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, expenseDate])
+  @@map("expenses")
+}
+
+model Material {
+  id        String   @id @default(uuid())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String   @map("owner_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String   @map("project_id")
+  name      String
+  unit      String   @default("")
+  quantity  Decimal  @default(0) @db.Decimal(14, 2)
+  used      Decimal  @default(0) @db.Decimal(14, 2)
+  unitCost  Decimal  @default(0) @map("unit_cost") @db.Decimal(14, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("materials")
+}
+
+model Report {
+  id         String   @id @default(uuid())
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId    String   @map("owner_id")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId  String   @map("project_id")
+  title      String
+  body       String   @default("")
+  reportDate DateTime @map("report_date") @db.Date
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("reports")
+}
+
+model Attachment {
+  id        String   @id @default(uuid())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String   @map("owner_id")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?  @map("project_id")
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String?  @map("message_id")
+  path      String
+  filename  String   @default("")
+  mimeType  String   @default("") @map("mime_type")
+  sizeBytes Int      @default(0) @map("size_bytes")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([messageId])
+  @@map("attachments")
+}
+
+model ProgressEvent {
+  id        String   @id @default(uuid())
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String   @map("owner_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String   @map("project_id")
+  progress  Decimal  @db.Decimal(5, 2)
+  note      String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("progress_events")
+}
+
+model Conversation {
+  id             String    @id @default(uuid())
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId        String    @map("owner_id")
+  project        Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId      String?   @map("project_id")
+  title          String
+  recipientLabel String    @default("") @map("recipient_label")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  messages Message[]
+
+  @@index([ownerId, updatedAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  owner          User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId        String       @map("owner_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String       @map("conversation_id")
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId      String?      @map("project_id")
+  body           String       @default("")
+  sentAt         DateTime     @default(now()) @map("sent_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  attachments Attachment[]
+
+  @@index([conversationId, sentAt])
+  @@map("messages")
+}

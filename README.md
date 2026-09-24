@@ -23,8 +23,9 @@
 ## Plateformes
 
 Cibles actives : **Android** (mobile) et **Windows** (desktop) pour Flutter,
-plus une application **web Next.js** dans le sous-dossier `web/` (même backend
-Supabase). Aucun `flutter build web` ni config Vercel Flutter ici.
+une application **web Next.js** dans le sous-dossier `web/`, et un **backend
+REST séparé** dans le sous-dossier `api/` (voir ci-dessous). Aucun
+`flutter build web` ni config Vercel Flutter ici.
 
 ## Lancer
 
@@ -59,5 +60,30 @@ flutter test   # tests de widgets + tests de non-débordement (desktop & mobile)
 - `lib/data` : stockage local (source de vérité) et future synchro.
 - `lib/features_pages.dart` : écrans de fonctionnalités.
 - `lib/messages_page.dart` : messagerie.
-- `supabase/migrations` : schéma SQL (projets, paiements, messages, stockage média).
+- `supabase/migrations` : schéma SQL historique (référence du modèle de données).
 - `web/` : app web **Next.js 16** (voir `web/README.md`).
+- `api/` : **backend REST Node.js + Express + TypeScript** (voir ci-dessous).
+
+## Backend REST (`api/`)
+
+Backend séparé, autonome (ni Supabase Auth ni Supabase JS) :
+
+- **Stack** : Node.js + Express 5 + TypeScript, validation **Zod**, auth
+  **JWT** (access + refresh), mots de passe **bcrypt**, persistance
+  **PostgreSQL via Prisma 6**, tests **Vitest + Supertest**.
+- **Routes** : `POST /api/v1/auth/register|login|refresh`, `GET /api/v1/auth/me`,
+  `GET|POST /api/v1/projects` (+ `/:id`), `activities`, `people`,
+  `finances/payments`, `finances/expenses`, `GET /healthz`.
+
+```sh
+cd api
+npm install
+cp .env.example .env        # renseigner DATABASE_URL + JWT secrets
+npm run db:push             # crée les tables (schéma Prisma)
+npm run db:seed             # utilisateur démo demo@alliya.cd / demo1234
+npm run dev                 # http://localhost:4000
+
+npm test                    # 7 tests (health, 401, 404, validation…)
+npm run typecheck
+npm run build && npm start  # dist/ en production
+```
