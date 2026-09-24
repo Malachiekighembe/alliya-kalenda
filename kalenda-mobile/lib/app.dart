@@ -56,6 +56,8 @@ class _AlliyaKalendaAppState extends State<AlliyaKalendaApp> {
     final theme = ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       textTheme: GoogleFonts.dmSansTextTheme().copyWith(
         displaySmall: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w800),
         headlineSmall: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w800),
@@ -497,7 +499,7 @@ class _AppShellState extends State<AppShell> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: kProjectCovers.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (context, index) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
                         final cover = kProjectCovers[index];
                         final isSelected = cover == selectedCover;

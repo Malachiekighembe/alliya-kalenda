@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 /// Icônes SVG inline (style Material, calquées sur les destinations du
 /// NavigationRail / NavigationBar Flutter).
@@ -46,10 +47,13 @@ const secondaryNav = [
   { href: "/parametres", label: "Paramètres", icon: "settings" },
 ];
 
+const mobilePrimaryNav = primaryNav.slice(0, 4);
+
 /// Barre latérale fixe (desktop) + barre de navigation basse (mobile),
 /// miroir du NavigationRail / NavigationBar Flutter.
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
@@ -102,9 +106,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* Barre mobile */}
-        <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-card-border bg-white md:hidden">
-          {[...primaryNav, ...secondaryNav].map((item) => {
+        {/* Barre mobile : 4 accès lisibles + menu Plus */}
+        <nav
+        aria-label="Navigation principale"
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-card-border bg-white/95 shadow-[0_-4px_18px_rgba(11,34,64,0.06)] backdrop-blur md:hidden"
+      >
+          {mobilePrimaryNav.map((item) => {
             const active = isActive(item.href);
             return (
               <Link
@@ -113,18 +120,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
                 className={
-                  "flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-semibold " +
+                  "flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold " +
                   (active ? "text-accent" : "text-navy/60")
                 }
               >
-                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current" aria-hidden="true">
                   {icons[item.icon]}
                 </svg>
                 {item.label}
               </Link>
             );
           })}
+          <button
+            type="button"
+            aria-label="Ouvrir les autres espaces"
+            onClick={() => setMoreOpen((open) => !open)}
+            aria-expanded={moreOpen}
+            className="flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold text-navy/60"
+          >
+            <span className="text-lg leading-none">⋯</span>
+            Plus
+          </button>
         </nav>
+        {moreOpen ? (
+          <div className="fixed inset-x-3 bottom-20 z-30 rounded-2xl border border-card-border bg-white p-3 shadow-soft md:hidden">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="text-sm font-extrabold text-navy">Autres espaces</p>
+              <button type="button" onClick={() => setMoreOpen(false)} className="rounded-lg px-2 py-1 text-xs font-bold text-navy/50 hover:bg-surface-low">Fermer</button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {secondaryNav.map((item) => (
+                <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl bg-surface-low px-2 text-center text-[11px] font-bold text-navy/75">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-accent" aria-hidden="true">{icons[item.icon]}</svg>
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
