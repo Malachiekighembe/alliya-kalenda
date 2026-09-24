@@ -1,5 +1,6 @@
 import { initials } from "@/lib/format";
 import { demoPeople } from "@/lib/demo-data";
+import { Reveal } from "@/components/reveal";
 
 export default function PeoplePage() {
   return (
@@ -27,22 +28,21 @@ export default function PeoplePage() {
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {demoPeople.map((person) => (
-          <article
-            key={person.id}
-            className="flex items-center gap-3 rounded-xl border border-card-border bg-white p-4"
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">
-              {initials(person.name)}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-extrabold text-navy">
-                {person.name}
-              </p>
-              <p className="truncate text-xs text-navy/55">{person.role}</p>
-              <p className="truncate text-xs text-accent">{person.project}</p>
-            </div>
-          </article>
+        {demoPeople.map((person, index) => (
+          <Reveal key={person.id} delay={Math.min(index * 50, 300)}>
+            <article className="flex h-full items-center gap-3 rounded-xl border border-card-border bg-white p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-soft">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white shadow-inner">
+                {initials(person.name)}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-extrabold text-navy">
+                  {person.name}
+                </p>
+                <p className="truncate text-xs text-navy/55">{person.role}</p>
+                <p className="truncate text-xs font-semibold text-accent">{person.project}</p>
+              </div>
+            </article>
+          </Reveal>
         ))}
       </section>
     </div>
