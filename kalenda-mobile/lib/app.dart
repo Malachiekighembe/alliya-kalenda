@@ -432,43 +432,128 @@ class _AppShellState extends State<AppShell> {
   Future<void> _showAddProject(BuildContext context) async {
     final name = TextEditingController();
     final client = TextEditingController();
+    final location = TextEditingController(text: 'Kinshasa');
+    final amount = TextEditingController();
+    var selectedCover = kProjectCovers.first;
+    var status = ProjectStatus.planned;
+
     final result = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Nouveau projet'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: const InputDecoration(labelText: 'Nom'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Nouveau projet de chantier'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: name,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom du chantier *',
+                      hintText: 'ex. Résidence Bandalungwa',
+                      prefixIcon: Icon(Icons.apartment_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: client,
+                    decoration: const InputDecoration(
+                      labelText: 'Client ou maître d’ouvrage',
+                      hintText: 'ex. M. Mukendi',
+                      prefixIcon: Icon(Icons.person_outline_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: location,
+                    decoration: const InputDecoration(
+                      labelText: 'Localisation',
+                      hintText: 'ex. Gombe, Kinshasa',
+                      prefixIcon: Icon(Icons.place_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amount,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Montant du contrat (\$)',
+                      hintText: 'ex. 45000',
+                      prefixIcon: Icon(Icons.attach_money_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Photo de couverture',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 60,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: kProjectCovers.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final cover = kProjectCovers[index];
+                        final isSelected = cover == selectedCover;
+                        return GestureDetector(
+                          onTap: () => setDialogState(() => selectedCover = cover),
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected ? kAccent : Colors.transparent,
+                                width: 2.5,
+                              ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: ProjectCover(source: cover),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-            TextField(
-              controller: client,
-              decoration: const InputDecoration(labelText: 'Client'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                final trimmed = name.text.trim();
+                if (trimmed.isEmpty) return;
+                final parsedAmount = double.tryParse(amount.text.replaceAll(' ', '')) ?? 0;
+                widget.store.addProject(
+                  name: trimmed,
+                  client: client.text.trim().isEmpty ? 'Client non renseigné' : client.text.trim(),
+                  location: location.text.trim().isEmpty ? 'Kinshasa' : location.text.trim(),
+                  contractAmount: parsedAmount,
+                  status: status,
+                  imageUrl: selectedCover,
+                );
+                Navigator.pop(dialogContext, true);
+              },
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Créer le chantier'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (name.text.trim().isNotEmpty) {
-                widget.store.addProject(name.text.trim(), client.text.trim());
-                Navigator.pop(dialogContext, true);
-              }
-            },
-            child: const Text('Créer'),
-          ),
-        ],
       ),
     );
     if (result == true && mounted) {
       ScaffoldMessenger.of(this.context).showSnackBar(
-        const SnackBar(content: Text('Projet enregistré hors ligne')),
+        const SnackBar(content: Text('Chantier ajouté avec succès')),
       );
     }
   }

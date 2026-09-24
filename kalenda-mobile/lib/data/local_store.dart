@@ -182,25 +182,43 @@ class LocalStore extends ChangeNotifier {
     ];
   }
 
-  void addProject(String name, String client) {
+  void addProject({
+    required String name,
+    required String client,
+    String location = 'À préciser',
+    double contractAmount = 0,
+    double progress = 0,
+    ProjectStatus status = ProjectStatus.planned,
+    DateTime? plannedEnd,
+    String? imageUrl,
+  }) {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     projects.insert(
       0,
       Project(
         id: id,
         name: name,
-        reference: 'AK-${DateTime.now().year}-${projects.length + 4}',
+        reference: 'AK-${DateTime.now().year}-${(projects.length + 4).toString().padLeft(3, '0')}',
         client: client,
-        location: 'À préciser',
-        progress: 0,
-        status: ProjectStatus.planned,
-        contractAmount: 0,
-        plannedEnd: DateTime.now().add(const Duration(days: 90)),
-        imageUrl: coverForSeed(id),
+        location: location.isEmpty ? 'À préciser' : location,
+        progress: progress.clamp(0, 100),
+        status: status,
+        contractAmount: contractAmount,
+        plannedEnd: plannedEnd ?? DateTime.now().add(const Duration(days: 90)),
+        imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : coverForSeed(id),
       ),
     );
     _persist();
     notifyListeners();
+  }
+
+  void updateProject(Project project) {
+    final index = projects.indexWhere((p) => p.id == project.id);
+    if (index != -1) {
+      projects[index] = project;
+      _persist();
+      notifyListeners();
+    }
   }
 
   void deleteProject(Project project) {
