@@ -1,4 +1,4 @@
-# Alliya Kalenda — Backend REST (`api/`)
+# Alliya Kalenda — Backend REST (`kalenda-backend/`)
 
 API REST séparée pour Alliya Kalenda : **Node.js + Express 5 + TypeScript**.
 Autonome (aucune dépendance Supabase) : PostgreSQL via **Prisma 6**, auth

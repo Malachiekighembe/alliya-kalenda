@@ -1,60 +1,11 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# Monorepo Alliya Kalenda — un dossier par projet :
+#   kalenda-mobile/  Flutter (Android + Windows) — son propre .gitignore
+#   kalenda-web/     Next.js                   — son propre .gitignore
+#   kalenda-backend/ Node.js REST API          — son propre .gitignore
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
+# IDE / OS à la racine
 .idea/
+.DS_Store
+*.log
+.vscode/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Next.js app lives in web/ (its own .gitignore handles node_modules, .next, .env)
-/web/.dart_tool/
-
-# Windows build outputs
-/windows/**/Debug/
-/windows/**/Release/
-/windows/**/Profile/
-/windows/**/x64/
-/windows/flutter/ephemeral/
-
-# Android build outputs
-/android/app/debug
-/android/app/profile
-/android/app/release
-/android/.gradle/
-/android/app/build/
-/android/build/
-
-# Release artifacts produced locally (APK / MSIX / zip)
-/release/
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release

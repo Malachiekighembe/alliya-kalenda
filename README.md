@@ -20,16 +20,25 @@
 - `shared_preferences` (stockage local)
 - `google_fonts`, `intl`, `file_picker`, `connectivity_plus`
 
-## Plateformes
+## Plateformes & structure
 
-Cibles actives : **Android** (mobile) et **Windows** (desktop) pour Flutter,
-une application **web Next.js** dans le sous-dossier `web/`, et un **backend
-REST séparé** dans le sous-dossier `api/` (voir ci-dessous). Aucun
-`flutter build web` ni config Vercel Flutter ici.
+Monorepo à **trois dossiers séparés**, un par projet :
+
+```
+alliya_kalenda/
+├── kalenda-mobile/   Flutter — Android + Windows (cibles actives)
+├── kalenda-web/      Next.js 16 — version web  (voir kalenda-web/README.md)
+├── kalenda-backend/  Node.js REST API          (voir kalenda-backend/README.md)
+└── supabase/migrations/  schéma SQL de référence (modèle de données partagé)
+```
+
+Aucun `flutter build web` ni config Vercel Flutter ici : le web est Next.js,
+le backend est une API REST séparée.
 
 ## Lancer
 
 ```sh
+cd kalenda-mobile
 flutter pub get
 flutter run -d windows   # ou : flutter run -d android
 ```
@@ -37,6 +46,7 @@ flutter run -d windows   # ou : flutter run -d android
 ## Livrer (release locale)
 
 ```sh
+cd kalenda-mobile
 flutter build apk --release
 # -> build/app/outputs/flutter-apk/app-release.apk
 
@@ -44,27 +54,25 @@ flutter build windows --release
 # -> build/windows/x64/runner/Release/AlliyaKalenda.exe (+ dossier d'accompagnement)
 ```
 
-Copiez ensuite les artefacts vers `release/` (ignoré par git) pour distribution manuelle.
+Copiez ensuite les artefacts vers `kalenda-mobile/release/` (ignoré par git) pour distribution manuelle.
 
 ## Tester & analyser
 
 ```sh
+cd kalenda-mobile
 flutter analyze
 flutter test   # tests de widgets + tests de non-débordement (desktop & mobile)
 ```
 
-## Structure
+## Structure de kalenda-mobile/
 
 - `lib/core` : thème, tokens de couleurs, animations, formatage.
 - `lib/domain` : entités et modèles.
 - `lib/data` : stockage local (source de vérité) et future synchro.
 - `lib/features_pages.dart` : écrans de fonctionnalités.
 - `lib/messages_page.dart` : messagerie.
-- `supabase/migrations` : schéma SQL historique (référence du modèle de données).
-- `web/` : app web **Next.js 16** (voir `web/README.md`).
-- `api/` : **backend REST Node.js + Express + TypeScript** (voir ci-dessous).
 
-## Backend REST (`api/`)
+## Backend REST (`kalenda-backend/`)
 
 Backend séparé, autonome (ni Supabase Auth ni Supabase JS) :
 
@@ -76,7 +84,7 @@ Backend séparé, autonome (ni Supabase Auth ni Supabase JS) :
   `finances/payments`, `finances/expenses`, `GET /healthz`.
 
 ```sh
-cd api
+cd kalenda-backend
 npm install
 cp .env.example .env        # renseigner DATABASE_URL + JWT secrets
 npm run db:push             # crée les tables (schéma Prisma)
