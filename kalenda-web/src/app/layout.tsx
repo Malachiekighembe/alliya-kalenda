@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   title: "Alliya Kalenda",
   description:
     "Alliya Kalenda — suivi de chantiers, agenda et finances pour ingénieurs et conducteurs de travaux.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

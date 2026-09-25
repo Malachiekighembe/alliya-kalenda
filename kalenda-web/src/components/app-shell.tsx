@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -84,9 +85,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Rail desktop */}
       <aside className="sticky top-0 hidden h-screen w-16 flex-col border-r border-card-border bg-white md:flex md:w-56 lg:w-60">
         <div className="flex items-center gap-2 px-4 py-5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-navy text-lg font-extrabold text-white">
-            A
-          </span>
+          <Image
+            src="/icon.png"
+            alt="Logo Alliya Kalenda"
+            width={40}
+            height={40}
+            priority
+            className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-navy/10"
+          />
           <span className="hidden text-base font-extrabold tracking-tight text-navy md:inline">
             Alliya Kalenda
           </span>
@@ -102,6 +108,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-3 border-b border-card-border bg-white px-4 py-3 md:hidden">
+          <Image
+            src="/icon.png"
+            alt="Logo Alliya Kalenda"
+            width={36}
+            height={36}
+            priority
+            className="h-9 w-9 rounded-lg object-cover shadow-sm ring-1 ring-navy/10"
+          />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-extrabold tracking-tight text-navy">
+              Alliya Kalenda
+            </p>
+            <p className="truncate text-[11px] font-medium text-navy/50">
+              Suivi de vos chantiers
+            </p>
+          </div>
+        </header>
         <main className="flex-1 px-4 pb-28 pt-4 md:px-6 md:pb-8 md:pt-6">
           {children}
         </main>
