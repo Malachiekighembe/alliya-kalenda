@@ -33,7 +33,18 @@ const registerSchema = z
       .regex(phonePattern, "Numéro de téléphone invalide.")
       .optional(),
     password: z.string().min(8),
-    fullName: z.string().min(1),
+    /** Nom de famille, puis prenom : l'ordre suit l'usage local. */
+    lastName: z.string().min(1, "Le nom est requis."),
+    firstName: z.string().min(1, "Le post-nom est requis."),
+    /**
+     * Date de naissance au format AAAA-MM-JJ. Facultative : l'utilisateur
+     * peut la completer plus tard depuis son profil.
+     */
+    birthDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Date de naissance invalide.")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
     /** Module choisi lors du parcours d'inscription (cf. lib/modules.ts). */
     module: z.string().min(1).default("electricite"),
     /** Metier exerce : specialite du module, stocke dans `job_title`. */
@@ -98,6 +109,21 @@ async function findByIdentifier(identifier: string) {
   });
 }
 
+/**
+ * Repartit un nom complet en nom de famille et prenom.
+ *
+ * L'ordre retenu est nom puis prenom, comme les champs du formulaire.
+ * `fullName` est reconstitue pour les ecrans qui l'affichent encore.
+ */
+function splitName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return { lastName: "", firstName: "", fullName: "" };
+  }
+  const [first, ...rest] = parts;
+  return { lastName: rest.join(" "), firstName: first, fullName };
+}
+
 const googleClient = new OAuth2Client(
   config.GOOGLE_CLIENT_ID || "client-id-non-configure.apps.googleusercontent.com",
 );
@@ -156,7 +182,9 @@ authRouter.post(
         email: rawEmail,
         phone: rawPhone,
         password,
-        fullName,
+        lastName,
+        firstName,
+        birthDate,
         module,
         jobTitle,
         companyName,
@@ -184,7 +212,13 @@ authRouter.post(
           passwordHash,
           profile: {
             create: {
-              fullName,
+              lastName,
+              firstName,
+              // Date facultative : absente tant que l'utilisateur ne la
+              // renseigne pas depuis son profil.
+              birthDate: birthDate ? new Date(`${birthDate}T00:00:00Z`) : null,
+              // `fullName` reste renseigne pour les ecrans existants.
+              fullName: `${lastName} ${firstName}`.trim(),
               module,
               jobTitle,
               companyName,
@@ -364,7 +398,9 @@ authRouter.post(
           passwordHash,
           profile: {
             create: {
-              fullName: name || email.split("@")[0],
+              // Google fournit un nom unique : on repartit le premier mot en
+              // prenom, le reste en nom de famille.
+              ...splitName(name || email.split("@")[0]),
               module,
               jobTitle,
               companyName,

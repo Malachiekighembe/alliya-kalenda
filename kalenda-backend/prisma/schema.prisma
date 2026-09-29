@@ -65,6 +65,15 @@ model User {
 model Profile {
   id                   String   @id
   user                 User     @relation(fields: [id], references: [id], onDelete: Cascade)
+  /// Nom de famille, saisi a l'inscription.
+  lastName             String   @default("") @map("last_name")
+  /// Prenom, saisi a l'inscription.
+  firstName            String   @default("") @map("first_name")
+  /// Date de naissance. Facultative : l'utilisateur peut la completer plus
+  /// tard depuis son profil, elle n'est pas demandee a l'inscription.
+  birthDate            DateTime? @map("birth_date") @db.Date
+  /// Nom complet, conserve pour les ecrans existants ; toujours calcule a
+  /// partir de `lastName` et `firstName`.
   fullName             String   @default("") @map("full_name")
   /// Module d'activite choisi a l'inscription (electricite, plomberie, ...).
   module               String   @default("electricite")

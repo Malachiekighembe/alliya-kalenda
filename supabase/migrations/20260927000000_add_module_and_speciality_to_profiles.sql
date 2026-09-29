@@ -93,6 +93,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS "users_google_sub_key" ON "users" ("google_sub
 -- L'e-mail reste unique quand il est renseigne.
 CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users" ("email");
 
+-- Nom, post-nom et date de naissance.
+--
+-- `full_name` est conserve : les ecrans existants l'affichent encore, et il
+-- reste derive de `last_name` et `first_name`. La date est nullable, elle se
+-- complete depuis le profil.
+ALTER TABLE "profiles"
+    ADD COLUMN IF NOT EXISTS "last_name" TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS "first_name" TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS "birth_date" DATE;
+
 -- Module d'activite et specialite.
 --
 -- L'inscription n'est plus un simple formulaire : l'utilisateur choisit un

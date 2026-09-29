@@ -295,6 +295,7 @@ function TextField({
   autoComplete,
   field,
   required,
+  max,
 }: {
   id: string;
   label: string;
@@ -305,6 +306,8 @@ function TextField({
   autoComplete?: string;
   field: string;
   required?: boolean;
+  /** Borne haute d'un champ `date`, ici la date du jour. */
+  max?: string;
 }) {
   return (
     <div>
@@ -315,6 +318,7 @@ function TextField({
         id={id}
         type={type}
         required={required ?? true}
+        max={max}
         minLength={type === "password" ? 8 : undefined}
         autoComplete={autoComplete}
         value={value}
@@ -538,6 +542,12 @@ export default function LoginPage() {
   // Un seul champ : e-mail ou numero. Le backend decide via la presence
   // d'un « @ », et nous n'imposons pas de choisir a l'avance.
   const [identifier, setIdentifier] = useState("");
+  // Nom de famille puis prenom, saisis separement.
+  const [lastName, setLastName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  // Date de naissance facultative : l'utilisateur peut la completer plus
+  // tard depuis son profil.
+  const [birthDate, setBirthDate] = useState("");
   // E-mail ou telephone : le choix est explicite, pas deduit de la saisie.
   const [identifierKind, setIdentifierKind] = useState<"email" | "phone">(
     "email",
@@ -675,7 +685,10 @@ export default function LoginPage() {
             ? { phone: composed }
             : { email: composed }),
           password,
-          fullName: fullName.trim(),
+          lastName: lastName.trim(),
+          firstName: firstName.trim(),
+          // Date facultative : envoyee seulement si elle a ete saisie.
+          ...(birthDate ? { birthDate } : {}),
           module: moduleId ?? "",
           jobTitle: speciality.jobTitle ?? "",
           companyName: speciality.companyName ?? "",
@@ -834,16 +847,46 @@ export default function LoginPage() {
             {mode === "login" || step === 0 ? (
               <>
                 {mode === "register" && !pendingGoogle ? (
-                  <TextField
-                    id="fullName"
-                    label="Nom complet"
-                    type="text"
-                    value={fullName}
-                    onChange={setFullName}
-                    placeholder="ex. Malachie Kighembe"
-                    autoComplete="name"
-                    field={field}
-                  />
+                  <>
+                    {/* Nom et post-nom saisis separement : l'ordre suit
+                        l'usage local, le prenom servant a l'affichage. */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <TextField
+                        id="lastName"
+                        label="Nom"
+                        type="text"
+                        value={lastName}
+                        onChange={setLastName}
+                        placeholder="KIGHEMBE"
+                        autoComplete="family-name"
+                        field={field}
+                      />
+                      <TextField
+                        id="firstName"
+                        label="Post-nom"
+                        type="text"
+                        value={firstName}
+                        onChange={setFirstName}
+                        placeholder="Malachie"
+                        autoComplete="given-name"
+                        field={field}
+                      />
+                    </div>
+                    {/* `type="date"` ouvre le selecteur natif ; la date est
+                        facultative, l'utilisateur peut la completer plus tard
+                        depuis son profil. */}
+                    <TextField
+                      id="birthDate"
+                      label="Date de naissance (facultatif)"
+                      type="date"
+                      value={birthDate}
+                      onChange={setBirthDate}
+                      max={new Date().toISOString().slice(0, 10)}
+                      autoComplete="bday"
+                      field={field}
+                      required={false}
+                    />
+                  </>
                 ) : null}
                 {mode === "register" && pendingGoogle ? null : (
                   <div>
@@ -1123,7 +1166,7 @@ export default function LoginPage() {
                       // Google fournit deja nom et e-mail : on ne les exige pas.
                       const missingIdentity = pendingGoogle
                         ? false
-                        : !fullName.trim() || !identifier.trim();
+                        : !lastName.trim() || !firstName.trim() || !identifier.trim();
                       if (missingIdentity || password.length < 8) {
                         setError(
                           "Renseignez votre identité et un mot de passe " +

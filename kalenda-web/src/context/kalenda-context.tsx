@@ -85,7 +85,7 @@ export interface KalendaContextType {
   /** Acheve l'inscription liee a Google : module, metier, mot de passe. */
   completeGoogleSignup: (
     credential: string,
-    input: Omit<RegisterInput, "fullName" | "email">,
+    input: Omit<RegisterInput, "lastName" | "firstName" | "email">,
   ) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
@@ -287,7 +287,7 @@ export function KalendaProvider({ children }: { children: React.ReactNode }) {
 
   const completeGoogleSignup = async (
     credential: string,
-    input: Omit<RegisterInput, "fullName" | "email">,
+    input: Omit<RegisterInput, "lastName" | "firstName" | "email">,
   ) => {
     setError(null);
     try {

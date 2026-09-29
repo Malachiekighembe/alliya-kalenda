@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Client HTTP de l'API Alliya Kalenda (kalenda-backend).
  *
  * La cible vient de `NEXT_PUBLIC_API_URL` : basculer de `localhost` en dev vers
@@ -166,7 +166,7 @@ export async function request<T>(
 }
 
 /* ------------------------------------------------------------------ */
-/* Contrats — alignes sur prisma/schema.prisma et les routes           */
+/* Contrats â€” alignes sur prisma/schema.prisma et les routes           */
 /* ------------------------------------------------------------------ */
 
 export interface AuthUser {
@@ -224,7 +224,10 @@ export interface ApiActivity {
 export interface ApiPerson {
   id: string;
   fullName: string;
-  phone: string;
+  lastName: string;
+  firstName: string;
+  /** Date de naissance, absente tant que l'utilisateur ne l'a pas saisie. */
+  birthDate: string | null;
   jobTitle: string;
   address: string;
   notes: string;
@@ -322,6 +325,10 @@ export interface ApiProfile {
   createdAt: string;
   profile: {
     fullName: string;
+    lastName: string;
+    firstName: string;
+    /** Date de naissance, absente tant que l'utilisateur ne l'a pas saisie. */
+    birthDate: string | null;
     module: string;
     jobTitle: string;
     certifications: string;
@@ -360,7 +367,11 @@ export type RegisterInput = {
   email?: string;
   phone?: string;
   password: string;
-  fullName: string;
+  /** Nom de famille, puis prenom : l'ordre suit l'usage local. */
+  lastName: string;
+  firstName: string;
+  /** Date de naissance au format AAAA-MM-JJ. Facultative. */
+  birthDate?: string;
   module: string;
   jobTitle: string;
   companyName: string;
@@ -379,7 +390,7 @@ export type GoogleSignupRequired = {
 
 
 /* ------------------------------------------------------------------ */
-/* Endpoints — uniquement ce que le backend expose reellement         */
+/* Endpoints â€” uniquement ce que le backend expose reellement         */
 /* ------------------------------------------------------------------ */
 
 export const api = {
@@ -443,7 +454,7 @@ export const api = {
               email: data.error.email ?? "",
               name: data.error.name ?? "",
               requiresLink: Boolean(data.error.requiresLink),
-              message: data.error.message ?? "Complétez votre inscription.",
+              message: data.error.message ?? "ComplÃ©tez votre inscription.",
             },
           };
         }
@@ -454,7 +465,7 @@ export const api = {
     /** Acheve l'inscription d'une identite Google et ouvre la session. */
     googleRegister: (
       credential: string,
-      input: Omit<RegisterInput, "fullName" | "email">,
+      input: Omit<RegisterInput, "lastName" | "firstName" | "email">,
     ) =>
       request<AuthSession>("/api/v1/auth/google/register", {
         method: "POST",
@@ -586,3 +597,4 @@ export const api = {
       }),
   },
 };
+

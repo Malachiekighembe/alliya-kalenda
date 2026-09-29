@@ -151,10 +151,12 @@ class LocalStore extends ChangeNotifier {
     String? email,
     String? phone,
     required String password,
-    required String fullName,
+    required String lastName,
+    required String firstName,
     required String module,
     required String jobTitle,
     String companyName = '',
+    String? birthDate,
     String certifications = '',
   }) async {
     errorMessage = null;
@@ -163,10 +165,12 @@ class LocalStore extends ChangeNotifier {
       email: email,
       phone: phone,
       password: password,
-      fullName: fullName,
+      lastName: lastName,
+      firstName: firstName,
       module: module,
       jobTitle: jobTitle,
       companyName: companyName,
+      birthDate: birthDate,
       certifications: certifications,
     );
     await _adoptSession();

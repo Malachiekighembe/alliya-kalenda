@@ -56,7 +56,11 @@ class _LoginPageState extends State<LoginPage> {
   final _identifier = TextEditingController();
   final _password = TextEditingController();
   final _passwordConfirm = TextEditingController();
-  final _fullName = TextEditingController();
+  // Nom de famille puis prenom, saisis separement.
+  final _lastName = TextEditingController();
+  final _firstName = TextEditingController();
+  // Date de naissance facultative, choisie dans un selecteur natif.
+  DateTime? _birthDate;
 
   /// Specialite : un controleur par champ declare par le module choisi.
   final _speciality = <String, TextEditingController>{};
@@ -103,7 +107,8 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    _fullName.dispose();
+    _lastName.dispose();
+    _firstName.dispose();
     _identifier.dispose();
     _password.dispose();
     _passwordConfirm.dispose();
@@ -213,7 +218,14 @@ class _LoginPageState extends State<LoginPage> {
           email: byPhone ? null : identifier,
           phone: byPhone ? identifier : null,
           password: _password.text,
-          fullName: _fullName.text.trim(),
+          lastName: _lastName.text.trim(),
+        firstName: _firstName.text.trim(),
+        // Date facultative : envoyee seulement si elle a ete choisie.
+        birthDate: _birthDate == null
+            ? null
+            : '${_birthDate!.year.toString().padLeft(4, '0')}-'
+                '${_birthDate!.month.toString().padLeft(2, '0')}-'
+                '${_birthDate!.day.toString().padLeft(2, '0')}',
           module: _moduleId ?? '',
           jobTitle: value('jobTitle'),
           companyName: value('companyName'),
@@ -674,7 +686,14 @@ class _LoginPageState extends State<LoginPage> {
         ];
       }
       return [
-        if (_register) ...[_nameField(), const SizedBox(height: 10)],
+        if (_register) ...[
+          _nameFields(),
+          const SizedBox(height: 10),
+          // Date facultative : l'utilisateur peut la completer plus tard
+          // depuis son profil.
+          _birthDateField(),
+          const SizedBox(height: 10),
+        ],
         _identifierField(),
         const SizedBox(height: 10),
         _passwordField(),
@@ -720,14 +739,78 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
 
-  Widget _nameField() => TextFormField(
-    controller: _fullName,
-    textInputAction: TextInputAction.next,
-    style: const TextStyle(fontSize: 14),
-    decoration: _input('Nom complet'),
-    validator: (value) =>
-        (value == null || value.trim().isEmpty) ? 'Champ requis' : null,
+  /// Nom et post-nom, saisis separement comme le veut l'usage local.
+  Widget _nameFields() => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: TextFormField(
+          controller: _lastName,
+          textInputAction: TextInputAction.next,
+          style: const TextStyle(fontSize: 14),
+          decoration: _input('Nom'),
+          validator: (value) =>
+              (value == null || value.trim().isEmpty) ? 'Requis' : null,
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: TextFormField(
+          controller: _firstName,
+          textInputAction: TextInputAction.next,
+          style: const TextStyle(fontSize: 14),
+          decoration: _input('Post-nom'),
+          validator: (value) =>
+              (value == null || value.trim().isEmpty) ? 'Requis' : null,
+        ),
+      ),
+    ],
   );
+
+  /// Date de naissance, facultative.
+  ///
+  /// Un `showDatePicker` plutot qu'une saisie libre : le format ne peut pas
+  /// etre faux, et le clavier mobile propose la bonnevue. La date est
+  /// bornee a aujourd'hui.
+  Widget _birthDateField() {
+    final today = DateTime.now();
+    final text = _birthDate == null
+        ? ''
+        : '${_birthDate!.year.toString().padLeft(4, '0')}-'
+            '${_birthDate!.month.toString().padLeft(2, '0')}-'
+            '${_birthDate!.day.toString().padLeft(2, '0')}';
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: _birthDate ?? DateTime(today.year - 25),
+          // On ne saisit pas une date future.
+          firstDate: DateTime(today.year - 100),
+          lastDate: today,
+        );
+        if (picked != null) setState(() => _birthDate = picked);
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: InputDecorator(
+        decoration: _input(
+          'Date de naissance (facultatif)',
+        ).copyWith(
+          suffixIcon: const Icon(
+            Icons.calendar_today_rounded,
+            size: 16,
+            color: Color(0xff9aa9b8),
+          ),
+        ),
+        child: Text(
+          text.isEmpty ? 'Choisir une date' : text,
+          style: TextStyle(
+            fontSize: 14,
+            color: text.isEmpty ? const Color(0xff9aa9b8) : const Color(0xff16202c),
+          ),
+        ),
+      ),
+    );
+  }
 
   /// Un seul champ pour l'e-mail ou le numero : le choix est fait au
   /// bouton, pas deduit de ce que l'utilisateur tape.
