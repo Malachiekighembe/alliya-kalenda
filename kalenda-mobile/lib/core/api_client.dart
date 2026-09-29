@@ -76,6 +76,74 @@ class ModuleField {
   String get displayLabel => optional ? '$label (facultatif)' : label;
 }
 
+/// Un pays et son indicatif telephonique international.
+class Country {
+  const Country(this.code, this.dial, this.label);
+
+  /// Code ISO 3166-1 alpha-2.
+  final String code;
+
+  /// Indicatif, sans « + ».
+  final String dial;
+  final String label;
+}
+
+/// Pays proposes pour la connexion par telephone.
+///
+/// Liste volontairement restreinte aux pays francophones et voisins, plus
+/// quelques pays frequents. Un numero hors liste reste saisissable en
+/// ecrivant l'indicatif complet dans le champ.
+const List<Country> kCountries = [
+  Country('CD', '243', 'République démocratique du Congo'),
+  Country('CG', '242', 'Congo'),
+  Country('CI', '225', "Côte d'Ivoire"),
+  Country('CM', '237', 'Cameroun'),
+  Country('CF', '236', 'République centrafricaine'),
+  Country('GA', '241', 'Gabon'),
+  Country('GQ', '240', 'Guinée équatoriale'),
+  Country('TD', '235', 'Tchad'),
+  Country('AO', '244', 'Angola'),
+  Country('ZM', '260', 'Zambie'),
+  Country('MA', '212', 'Maroc'),
+  Country('DZ', '213', 'Algérie'),
+  Country('TN', '216', 'Tunisie'),
+  Country('SN', '221', 'Sénégal'),
+  Country('ML', '223', 'Mali'),
+  Country('BF', '226', 'Burkina Faso'),
+  Country('NE', '227', 'Niger'),
+  Country('BJ', '229', 'Bénin'),
+  Country('GN', '224', 'Guinée'),
+  Country('RW', '250', 'Rwanda'),
+  Country('BI', '257', 'Burundi'),
+  Country('UG', '256', 'Ouganda'),
+  Country('KE', '254', 'Kenya'),
+  Country('TZ', '255', 'Tanzanie'),
+  Country('MG', '261', 'Madagascar'),
+  Country('MU', '230', 'Maurice'),
+  Country('FR', '33', 'France'),
+  Country('BE', '32', 'Belgique'),
+  Country('CH', '41', 'Suisse'),
+  Country('CA', '1', 'Canada'),
+];
+
+const String kDefaultCountry = 'CD';
+
+/// Indicatif du pays choisi, avec repli sur la RDC.
+String dialFor(String code) => kCountries
+    .firstWhere((c) => c.code == code, orElse: () => kCountries.first)
+    .dial;
+
+/// Compose l'identifiant transmis au backend.
+///
+/// Un e-mail passe tel quel ; un numero recoit l'indicatif choisi. Si
+/// l'utilisateur a deja saisi un « + », on ne l'ajoute pas deux fois.
+String toIdentifier(String value, String dial) {
+  final trimmed = value.trim();
+  if (trimmed.contains('@') || trimmed.startsWith('+')) return trimmed;
+  final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+  return digits.isEmpty ? trimmed : '+$dial$digits';
+}
+
 /// Client HTTP de l'API Alliya Kalenda (kalenda-backend).
 ///
 /// L'URL de base est injectee a la compilation :

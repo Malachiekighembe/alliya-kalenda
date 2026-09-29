@@ -11,6 +11,7 @@ import {
   type RegisterInput,
 } from "@/lib/api";
 import { findModule, isAvailable, type KalendaModuleDef } from "@/lib/modules";
+import { COUNTRIES, DEFAULT_COUNTRY, toIdentifier } from "@/lib/phone";
 import { useKalenda } from "@/context/kalenda-context";
 
 /** Etapes du parcours d'inscription, dans l'ordre. */
@@ -433,6 +434,9 @@ export default function LoginPage() {
   // Un seul champ : e-mail ou numero. Le backend decide via la presence
   // d'un « @ », et nous n'imposons pas de choisir a l'avance.
   const [identifier, setIdentifier] = useState("");
+  // Indicatif pays, applique quand la saisie est un numero et non un e-mail.
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const dial = COUNTRIES.find((c) => c.code === country)?.dial ?? "243";
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [fullName, setFullName] = useState("");
@@ -539,7 +543,9 @@ export default function LoginPage() {
     setError(null);
     try {
       if (mode === "login") {
-        await login(identifier.trim(), password);
+        // L'indicatif n'est ajoute que si la saisie est un numero : un
+        // e-mail passe tel quel.
+        await login(toIdentifier(identifier, dial), password);
       } else if (pendingGoogle) {
         // Le compte vient de Google : on ne redemande ni e-mail ni nom, qui
         // sont deja connus et verifies.
@@ -553,8 +559,11 @@ export default function LoginPage() {
         });
       } else {
         const isEmail = identifier.includes("@");
+        const composed = toIdentifier(identifier, dial);
         const payload: RegisterInput = {
-          ...(isEmail ? { email: identifier.trim() } : { phone: identifier.trim() }),
+          ...(isEmail
+            ? { email: composed }
+            : { phone: composed }),
           password,
           fullName: fullName.trim(),
           module: moduleId ?? "",
@@ -727,16 +736,42 @@ export default function LoginPage() {
                   />
                 ) : null}
                 {mode === "register" && pendingGoogle ? null : (
-                  <TextField
-                    id="identifier"
-                    label="E-mail ou numéro de téléphone"
-                    type="text"
-                    value={identifier}
-                    onChange={setIdentifier}
-                    placeholder="ex. contact@alliyakalenda.cd ou +243 81 000 0000"
-                    autoComplete="username"
-                    field={field}
-                  />
+                  <div>
+                    <label
+                      htmlFor="identifier"
+                      className="text-[12px] font-bold text-navy"
+                    >
+                      E-mail ou numéro de téléphone
+                    </label>
+                    <div className="mt-1 flex gap-2">
+                      {/* L'indicatif ne sert que pour un numero ; un e-mail
+                          passe au travers, le select devient sans effet. */}
+                      <select
+                        aria-label="Indicatif du pays"
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        className={
+                          field.replace("w-full", "w-[124px] shrink-0 pr-6")
+                        }
+                      >
+                        {COUNTRIES.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            +{item.dial} {item.code}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        id="identifier"
+                        type="text"
+                        required
+                        value={identifier}
+                        onChange={(e) => setIdentifier(e.target.value)}
+                        className={field.replace("mt-1 ", " ")}
+                        placeholder="ex. 81 000 0000"
+                        autoComplete="username"
+                      />
+                    </div>
+                  </div>
                 )}
                 <TextField
                   id="password"

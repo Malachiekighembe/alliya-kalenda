@@ -73,6 +73,9 @@ class _LoginPageState extends State<LoginPage> {
   String? _pendingGoogle;
   String? _pendingGoogleMessage;
 
+  /// Pays dont l'indicatif est applique aux numeros saisis.
+  String _country = kDefaultCountry;
+
   // Catalogue servi par l'API.
   List<KalendaModule> _modules = const [];
   bool _loadingModules = true;
@@ -194,7 +197,7 @@ class _LoginPageState extends State<LoginPage> {
           certifications: value('certifications'),
         );
       } else if (_register) {
-        final identifier = _identifier.text.trim();
+        final identifier = toIdentifier(_identifier.text, dialFor(_country));
         final isEmail = identifier.contains('@');
         await widget.store.register(
           email: isEmail ? identifier : null,
@@ -207,7 +210,10 @@ class _LoginPageState extends State<LoginPage> {
           certifications: value('certifications'),
         );
       } else {
-        await widget.store.login(_identifier.text, _password.text);
+        await widget.store.login(
+          toIdentifier(_identifier.text, dialFor(_country)),
+          _password.text,
+        );
       }
     } catch (error) {
       setState(() => _error = '$error');
@@ -672,26 +678,34 @@ class _LoginPageState extends State<LoginPage> {
   ///
   /// `isDense` et un `contentPadding` explicite evitent la hauteur par defaut
   /// de Material 3, qui allongeait le formulaire de plusieurs lignes.
-  InputDecoration _input(String label, {String? hint}) => InputDecoration(
-    labelText: label,
-    hintText: hint,
-    isDense: true,
-    filled: true,
-    fillColor: const Color(0xfff7fafc),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xffe3eaf1)),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xffe3eaf1)),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: kAccent, width: 1.4),
-    ),
-  );
+  InputDecoration _input(String label, {String? hint, Widget? prefix}) =>
+      InputDecoration(
+        labelText: label,
+        hintText: hint,
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xfff7fafc),
+        prefixIcon: prefix,
+        prefixIconConstraints: prefix == null
+            ? const BoxConstraints(minWidth: 0, minHeight: 0)
+            : const BoxConstraints(minWidth: 92, minHeight: 32),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 13,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xffe3eaf1)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xffe3eaf1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: kAccent, width: 1.4),
+        ),
+      );
 
   Widget _nameField() => TextFormField(
     controller: _fullName,
@@ -703,20 +717,44 @@ class _LoginPageState extends State<LoginPage> {
   );
 
   /// Un seul champ pour l'e-mail ou le numero : le backend tranche sur la
-  /// presence d'un « @ ». On valide donc « quelque chose », pas un format.
-  Widget _identifierField() => TextFormField(
-    controller: _identifier,
-    keyboardType: TextInputType.emailAddress,
-    textInputAction: TextInputAction.next,
-    style: const TextStyle(fontSize: 14),
-    decoration: _input(
-      'E-mail ou numéro de téléphone',
-      hint: 'ex. contact@alliyakalenda.cd ou +243 81 000 0000',
-    ),
-    validator: (value) => (value == null || value.trim().length < 3)
-        ? 'Saisissez votre e-mail ou votre numéro'
-        : null,
-  );
+  /// presence d'un « @ ». L'indicatif pays n'est ajoute que pour un numero.
+  Widget _identifierField() {
+    return TextFormField(
+      controller: _identifier,
+      keyboardType: TextInputType.text,
+      textInputAction: TextInputAction.next,
+      style: const TextStyle(fontSize: 14),
+      decoration: _input(
+        'E-mail ou numéro de téléphone',
+        hint: 'ex. 81 000 0000',
+        prefix: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: _country,
+            isDense: true,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xff16202c),
+            ),
+            // Un e-mail passe au travers : le select devient sans effet.
+            onChanged: (value) =>
+                setState(() => _country = value ?? kDefaultCountry),
+            items: kCountries
+                .map(
+                  (c) => DropdownMenuItem(
+                    value: c.code,
+                    child: Text('+${c.dial} ${c.code}'),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ),
+      validator: (value) => (value == null || value.trim().length < 3)
+          ? 'Saisissez votre e-mail ou votre numéro'
+          : null,
+    );
+  }
 
   Widget _passwordField() => TextFormField(
     controller: _password,
