@@ -424,13 +424,17 @@ function BrandPanel({ modules }: { modules: KalendaModuleDef[] }) {
 }
 
 export default function LoginPage() {
-  const { login, register, loginWithGoogle, user, isOnline } = useKalenda();
+  const { login, register, loginWithGoogle, completeGoogleSignup, user, isOnline } =
+    useKalenda();
   const router = useRouter();
   const pathname = usePathname();
 
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("");
+  // Un seul champ : e-mail ou numero. Le backend decide via la presence
+  // d'un « @ », et nous n'imposons pas de choisir a l'avance.
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -443,6 +447,17 @@ export default function LoginPage() {
   const [step, setStep] = useState(0);
   const [moduleId, setModuleId] = useState<string | null>(null);
   const [speciality, setSpeciality] = useState<Record<string, string>>({});
+
+  /**
+   * Jeton Google en attente : quand une identite Google n'est pas encore
+   * connue, l'ecran bascule sur le parcours et conserve le jeton pour
+   * l'nregistrer a la fin. Sans cela, l'utilisateur devrait rejouer la
+   * selection Google apres avoir choisi son module.
+   */
+  const [pendingGoogle, setPendingGoogle] = useState<{
+    credential: string;
+    message: string;
+  } | null>(null);
 
   const selectedModule = findModule(modules, moduleId);
 
@@ -483,8 +498,21 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await loginWithGoogle(credential);
-      router.push("/");
+      const result = await loginWithGoogle(credential);
+      if (result.linked) {
+        router.push("/");
+        return;
+      }
+      // Compte Google inconnu : aucun jeton n'a ete emis. On bascule sur le
+      // parcours en gardant le jeton, et l'e-mail Google est propose.
+      setPendingGoogle({ credential, message: result.signup.message });
+      setMode("register");
+      setStep(0);
+      setModuleId(null);
+      setSpeciality({});
+      setPassword("");
+      setPasswordConfirm("");
+      setError(result.signup.message);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible.");
     } finally {
@@ -501,24 +529,42 @@ export default function LoginPage() {
       );
       return;
     }
+    // Le mot de passe se tape deux fois : une faute de frappe dans un
+    // identifiant est irreversible si elle n'est pas vue.
+    if (mode === "register" && password !== passwordConfirm) {
+      setError("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       if (mode === "login") {
-        await login(email.trim(), password);
+        await login(identifier.trim(), password);
+      } else if (pendingGoogle) {
+        // Le compte vient de Google : on ne redemande ni e-mail ni nom, qui
+        // sont deja connus et verifies.
+        await completeGoogleSignup(pendingGoogle.credential, {
+          password,
+          module: moduleId ?? "",
+          jobTitle: speciality.jobTitle ?? "",
+          companyName: speciality.companyName ?? "",
+          certifications: speciality.certifications ?? "",
+          ...(speciality.phone ? { phone: speciality.phone } : {}),
+        });
       } else {
+        const isEmail = identifier.includes("@");
         const payload: RegisterInput = {
-          email: email.trim(),
+          ...(isEmail ? { email: identifier.trim() } : { phone: identifier.trim() }),
           password,
           fullName: fullName.trim(),
           module: moduleId ?? "",
           jobTitle: speciality.jobTitle ?? "",
           companyName: speciality.companyName ?? "",
-          phone: speciality.phone ?? "",
           certifications: speciality.certifications ?? "",
         };
         await register(payload);
       }
+      setPendingGoogle(null);
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible.");
@@ -537,6 +583,9 @@ export default function LoginPage() {
     setStep(0);
     setModuleId(null);
     setSpeciality({});
+    setPasswordConfirm("");
+    // Quitter le parcours Google abandonne aussi le jeton en attente.
+    setPendingGoogle(null);
     setError(null);
   };
 
@@ -579,6 +628,15 @@ export default function LoginPage() {
               {mode === "login" ? "Créer un compte" : "J'ai déjà un compte"}
             </button>
           </div>
+
+          {/* Identité Google reconnue mais compte inconnu : on explique ce
+              qu'il reste à faire plutôt que d'afficher une erreur. */}
+          {pendingGoogle ? (
+            <p className="mt-3 rounded-lg border border-accent/25 bg-accent/5 px-3 py-2 text-[12px] font-semibold text-navy/70">
+              {pendingGoogle.message} Choisissez votre module et créez votre
+              mot de passe.
+            </p>
+          ) : null}
 
           {/* Phrases rotatives : allègent l'ecran et montrent les modules.
               Reserve au mobile, le panneau desktop les affiche deja. */}
@@ -642,20 +700,21 @@ export default function LoginPage() {
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-card-border" />
                 <span className="text-[11.5px] font-semibold text-navy/40">
-                  ou par e-mail
+                  ou par e-mail / téléphone
                 </span>
                 <span className="h-px flex-1 bg-card-border" />
               </div>
             ) : (
               <p className="text-[11.5px] font-semibold uppercase tracking-wide text-navy/40">
-                Par e-mail
+                Par e-mail ou téléphone
               </p>
             )}
 
-            {/* Etape 1 — qui vous etes. */}
+            {/* Etape 1 — qui vous etes. Quand l'identite vient de Google,
+                e-mail et nom sont deja connus : on ne les redemande pas. */}
             {mode === "login" || step === 0 ? (
               <>
-                {mode === "register" ? (
+                {mode === "register" && !pendingGoogle ? (
                   <TextField
                     id="fullName"
                     label="Nom complet"
@@ -667,16 +726,18 @@ export default function LoginPage() {
                     field={field}
                   />
                 ) : null}
-                <TextField
-                  id="email"
-                  label="Adresse e-mail"
-                  type="email"
-                  value={email}
-                  onChange={setEmail}
-                  placeholder="ex. contact@alliyakalenda.cd"
-                  autoComplete="email"
-                  field={field}
-                />
+                {mode === "register" && pendingGoogle ? null : (
+                  <TextField
+                    id="identifier"
+                    label="E-mail ou numéro de téléphone"
+                    type="text"
+                    value={identifier}
+                    onChange={setIdentifier}
+                    placeholder="ex. contact@alliyakalenda.cd ou +243 81 000 0000"
+                    autoComplete="username"
+                    field={field}
+                  />
+                )}
                 <TextField
                   id="password"
                   label="Mot de passe"
@@ -693,6 +754,20 @@ export default function LoginPage() {
                   }
                   field={field}
                 />
+                {/* A l'inscription, le mot de passe se tape deux fois : une
+                    faute de frappe dans un identifiant est irreversible. */}
+                {mode === "register" ? (
+                  <TextField
+                    id="passwordConfirm"
+                    label="Confirmer le mot de passe"
+                    type="password"
+                    value={passwordConfirm}
+                    onChange={setPasswordConfirm}
+                    placeholder="Retapez votre mot de passe"
+                    autoComplete="new-password"
+                    field={field}
+                  />
+                ) : null}
               </>
             ) : null}
 
@@ -873,15 +948,19 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (
-                        !fullName.trim() ||
-                        !email.trim() ||
-                        password.length < 8
-                      ) {
+                      // Google fournit deja nom et e-mail : on ne les exige pas.
+                      const missingIdentity = pendingGoogle
+                        ? false
+                        : !fullName.trim() || !identifier.trim();
+                      if (missingIdentity || password.length < 8) {
                         setError(
-                          "Renseignez votre nom, votre e-mail et un mot de " +
-                            "passe d'au moins 8 caractères.",
+                          "Renseignez votre identité et un mot de passe " +
+                            "d'au moins 8 caractères.",
                         );
+                        return;
+                      }
+                      if (password !== passwordConfirm) {
+                        setError("Les deux mots de passe ne correspondent pas.");
                         return;
                       }
                       if (step === 1 && !moduleId) {

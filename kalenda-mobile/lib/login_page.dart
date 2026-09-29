@@ -48,9 +48,12 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _fullName = TextEditingController();
-  final _email = TextEditingController();
+  // Un seul champ : e-mail ou numero. Le backend decide via la presence
+  // d'un « @ », nous n'imposons pas de choisir a l'avance.
+  final _identifier = TextEditingController();
   final _password = TextEditingController();
+  final _passwordConfirm = TextEditingController();
+  final _fullName = TextEditingController();
 
   /// Specialite : un controleur par champ declare par le module choisi.
   final _speciality = <String, TextEditingController>{};
@@ -61,6 +64,14 @@ class _LoginPageState extends State<LoginPage> {
 
   int _step = 0;
   String? _moduleId;
+
+  /// Jeton Google en attente quand le compte n'existe pas encore.
+  ///
+  /// L'ecran bascule alors sur le parcours en gardant le jeton : sans cela,
+  /// il faudrait resselectionner le compte Google apres avoir choisi le
+  /// module et saisi le mot de passe.
+  String? _pendingGoogle;
+  String? _pendingGoogleMessage;
 
   // Catalogue servi par l'API.
   List<KalendaModule> _modules = const [];
@@ -84,8 +95,9 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     _fullName.dispose();
-    _email.dispose();
+    _identifier.dispose();
     _password.dispose();
+    _passwordConfirm.dispose();
     for (final controller in _speciality.values) {
       controller.dispose();
     }
@@ -137,6 +149,10 @@ class _LoginPageState extends State<LoginPage> {
 
   void _next() {
     if (_step == 0 && !(_formKey.currentState?.validate() ?? false)) return;
+    if (_register && _password.text != _passwordConfirm.text) {
+      setState(() => _error = 'Les deux mots de passe ne correspondent pas.');
+      return;
+    }
     if (_step == 1 && _moduleId == null) {
       setState(() => _error = 'Choisissez le module de votre métier.');
       return;
@@ -154,25 +170,44 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = 'Choisissez le module de votre métier.');
       return;
     }
+    if (_register && _password.text != _passwordConfirm.text) {
+      setState(() => _error = 'Les deux mots de passe ne correspondent pas.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      if (_register) {
-        String value(String key) => _speciality[key]?.text.trim() ?? '';
-        await widget.store.register(
-          email: _email.text.trim(),
+      final credential = _pendingGoogle;
+      String value(String key) => _speciality[key]?.text.trim() ?? '';
+      if (_register && credential != null) {
+        // Identite deja verifiee par Google : ni e-mail ni nom ne sont
+        // redemandes, seul le mot de passe et le module restent a choisir.
+        await widget.store.registerWithGoogle(
+          credential: credential,
           password: _password.text,
-          fullName: _fullName.text.trim(),
           module: _moduleId ?? '',
           jobTitle: value('jobTitle'),
           companyName: value('companyName'),
           phone: value('phone'),
           certifications: value('certifications'),
         );
+      } else if (_register) {
+        final identifier = _identifier.text.trim();
+        final isEmail = identifier.contains('@');
+        await widget.store.register(
+          email: isEmail ? identifier : null,
+          phone: isEmail ? null : identifier,
+          password: _password.text,
+          fullName: _fullName.text.trim(),
+          module: _moduleId ?? '',
+          jobTitle: value('jobTitle'),
+          companyName: value('companyName'),
+          certifications: value('certifications'),
+        );
       } else {
-        await widget.store.login(_email.text, _password.text);
+        await widget.store.login(_identifier.text, _password.text);
       }
     } catch (error) {
       setState(() => _error = '$error');
@@ -205,7 +240,20 @@ class _LoginPageState extends State<LoginPage> {
       if (idToken == null || idToken.isEmpty) {
         throw "Google n'a pas renvoyé de jeton d'identité.";
       }
-      await widget.store.loginWithGoogle(idToken);
+      try {
+        await widget.store.loginWithGoogle(idToken);
+      } on GoogleSignupRequired catch (required) {
+        // Compte inconnu : on bascule sur le parcours en gardant le jeton.
+        // Aucun mot de passe n'a ete emis par le backend a ce stade.
+        _resetWizard();
+        setState(() {
+          _pendingGoogle = idToken;
+          _pendingGoogleMessage = required.message;
+          _register = true;
+          _password.clear();
+          _passwordConfirm.clear();
+        });
+      }
     } on Exception catch (error) {
       // L'utilisateur a annule la selection : pas une erreur a afficher.
       if (!error.toString().contains('canceled')) {
@@ -590,11 +638,28 @@ class _LoginPageState extends State<LoginPage> {
   /// Les champs correspondant a l'etape courante.
   List<Widget> _currentStep() {
     if (!_register || _step == 0) {
+      // Identite Google : nom et contact sont deja connus et verifies,
+      // seul le mot de passe reste a saisir.
+      if (_register && _pendingGoogle != null) {
+        return [
+          if (_pendingGoogleMessage != null) ...[
+            _Notice(
+              text:
+                  '$_pendingGoogleMessage Choisissez votre module et créez votre mot de passe.',
+            ),
+            const SizedBox(height: 12),
+          ],
+          _passwordField(),
+          const SizedBox(height: 10),
+          _passwordConfirmField(),
+        ];
+      }
       return [
         if (_register) ...[_nameField(), const SizedBox(height: 10)],
-        _emailField(),
+        _identifierField(),
         const SizedBox(height: 10),
         _passwordField(),
+        if (_register) ...[const SizedBox(height: 10), _passwordConfirmField()],
       ];
     }
 
@@ -637,18 +702,20 @@ class _LoginPageState extends State<LoginPage> {
         (value == null || value.trim().isEmpty) ? 'Champ requis' : null,
   );
 
-  Widget _emailField() => TextFormField(
-    controller: _email,
+  /// Un seul champ pour l'e-mail ou le numero : le backend tranche sur la
+  /// presence d'un « @ ». On valide donc « quelque chose », pas un format.
+  Widget _identifierField() => TextFormField(
+    controller: _identifier,
     keyboardType: TextInputType.emailAddress,
     textInputAction: TextInputAction.next,
     style: const TextStyle(fontSize: 14),
-    decoration: _input('Adresse e-mail'),
-    validator: (value) {
-      final text = value?.trim() ?? '';
-      if (text.isEmpty) return 'Champ requis';
-      if (!text.contains('@')) return 'E-mail invalide';
-      return null;
-    },
+    decoration: _input(
+      'E-mail ou numéro de téléphone',
+      hint: 'ex. contact@alliyakalenda.cd ou +243 81 000 0000',
+    ),
+    validator: (value) => (value == null || value.trim().length < 3)
+        ? 'Saisissez votre e-mail ou votre numéro'
+        : null,
   );
 
   Widget _passwordField() => TextFormField(
@@ -658,6 +725,22 @@ class _LoginPageState extends State<LoginPage> {
     decoration: _input('Mot de passe'),
     validator: (value) =>
         (value ?? '').length < 8 ? '8 caractères minimum' : null,
+    onFieldSubmitted: (_) => _register ? _next() : _submit(),
+  );
+
+  /// A l'inscription, le mot de passe se tape deux fois : une faute de frappe
+  /// dans un identifiant est irreversible.
+  Widget _passwordConfirmField() => TextFormField(
+    controller: _passwordConfirm,
+    obscureText: true,
+    style: const TextStyle(fontSize: 14),
+    decoration: _input(
+      'Confirmer le mot de passe',
+      hint: 'Retapez votre mot de passe',
+    ),
+    validator: (value) => value != _password.text
+        ? 'Les deux mots de passe ne correspondent pas'
+        : null,
     onFieldSubmitted: (_) => _register ? _next() : _submit(),
   );
 

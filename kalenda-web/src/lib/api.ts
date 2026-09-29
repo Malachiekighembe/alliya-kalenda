@@ -350,16 +350,31 @@ export type ApiModule = {
   }[];
 };
 
-/** Specialisation collectee pendant le parcours d'inscription. */
+/**
+ * Specialisation collectee pendant le parcours d'inscription.
+ *
+ * `email` et `phone` sont l'un ou l'autre : le backend refuse un compte qui
+ * n'aurait aucun moyen de contact.
+ */
 export type RegisterInput = {
-  email: string;
+  email?: string;
+  phone?: string;
   password: string;
   fullName: string;
   module: string;
   jobTitle: string;
   companyName: string;
-  phone: string;
   certifications: string;
+};
+
+/** Donnees renvoyees quand Google ne reconnait pas encore le compte. */
+export type GoogleSignupRequired = {
+  /** Adresse Google, pre-remplie dans le parcours. */
+  email: string;
+  name: string;
+  /** Un compte de meme e-mail existe : il sera relie, pas duplique. */
+  requiresLink: boolean;
+  message: string;
 };
 
 
@@ -380,10 +395,11 @@ export const api = {
   },
 
   auth: {
-    login: (email: string, password: string) =>
+    /** Connexion par e-mail OU par numero de telephone. */
+    login: (identifier: string, password: string) =>
       request<AuthSession>("/api/v1/auth/login", {
         method: "POST",
-        body: { email, password },
+        body: { identifier, password },
         auth: false,
       }),
     register: (input: RegisterInput) =>
@@ -393,13 +409,56 @@ export const api = {
         auth: false,
       }),
     /**
-     * Echange un jeton d'identite Google contre une session Alliya Kalenda.
-     * Le backend verifie la signature et l'audience avant d'emettre ses JWT.
+     * Verifie une identite Google.
+     *
+     * Deux issues possibles, et c'est pourquoi l'appel n'est pas un simple
+     * `request` : le backend repond 409 quand il ne connait pas encore ce
+     * compte. L'echec n'est donc pas une erreur, c'est le debut du parcours
+     * d'inscription, et il faut pouvoir lire les donnees pour le preparer.
      */
-    google: (credential: string) =>
-      request<AuthSession>("/api/v1/auth/google", {
+    google: async (
+      credential: string,
+    ): Promise<
+      | { status: "linked"; session: AuthSession }
+      | { status: "signup-required"; signup: GoogleSignupRequired }
+    > => {
+      const response = await fetch(`${API_URL}/api/v1/auth/google`, {
         method: "POST",
-        body: { credential },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential }),
+      });
+
+      if (response.ok) {
+        return { status: "linked", session: (await response.json()) as AuthSession };
+      }
+
+      if (response.status === 409) {
+        const data = (await response.json()) as {
+          error?: Partial<GoogleSignupRequired> & { code?: string };
+        };
+        if (data.error?.code === "GOOGLE_ACCOUNT_REQUIRED") {
+          return {
+            status: "signup-required",
+            signup: {
+              email: data.error.email ?? "",
+              name: data.error.name ?? "",
+              requiresLink: Boolean(data.error.requiresLink),
+              message: data.error.message ?? "Complétez votre inscription.",
+            },
+          };
+        }
+      }
+
+      throw new ApiError(response.status, await parseError(response));
+    },
+    /** Acheve l'inscription d'une identite Google et ouvre la session. */
+    googleRegister: (
+      credential: string,
+      input: Omit<RegisterInput, "fullName" | "email">,
+    ) =>
+      request<AuthSession>("/api/v1/auth/google/register", {
+        method: "POST",
+        body: { credential, ...input },
         auth: false,
       }),
     me: () => request<ApiProfile>("/api/v1/auth/me"),

@@ -138,35 +138,70 @@ class ApiClient {
     onTokensChanged?.call(_accessToken, _refreshToken);
   }
 
-  Future<Map<String, dynamic>> login(String email, String password) {
-    return _auth('/api/v1/auth/login', {'email': email, 'password': password});
+  /// Connexion par e-mail OU par numero de telephone.
+  Future<Map<String, dynamic>> login(String identifier, String password) {
+    return _auth('/api/v1/auth/login', {
+      'identifier': identifier,
+      'password': password,
+    });
   }
 
-  /// Echange un jeton d'identite Google contre une session Alliya Kalenda.
-  Future<Map<String, dynamic>> loginWithGoogle(String credential) {
-    return _auth('/api/v1/auth/google', {'credential': credential});
+  /// Verifie une identite Google.
+  ///
+  /// Deux issues : le compte existe et la session est ouverte, ou le backend
+  /// repond 409 pour dire qu'il faut completer l'inscription. On leve une
+  /// [GoogleSignupRequired] dans ce second cas : ce n'est pas une panne.
+  Future<Map<String, dynamic>> loginWithGoogle(String credential) async {
+    final response = await _post('/api/v1/auth/google', {
+      'credential': credential,
+    });
+    if (response.statusCode == 409) {
+      throw GoogleSignupRequired.fromResponse(response);
+    }
+    return _readSession(response);
+  }
+
+  /// Acheve l'inscription d'une identite Google : module, metier, mot de passe.
+  Future<Map<String, dynamic>> registerWithGoogle({
+    required String credential,
+    required String password,
+    required String module,
+    required String jobTitle,
+    String companyName = '',
+    String? phone,
+    String certifications = '',
+  }) {
+    return _auth('/api/v1/auth/google/register', {
+      'credential': credential,
+      'password': password,
+      'module': module,
+      'jobTitle': jobTitle,
+      'companyName': companyName,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      'certifications': certifications,
+    });
   }
 
   /// Cree le compte avec le module et la specialite choisis a l'etape 2 et 3
-  /// du parcours d'inscription.
+  /// du parcours d'inscription. [email] et [phone] sont l'un ou l'autre.
   Future<Map<String, dynamic>> register({
-    required String email,
+    String? email,
+    String? phone,
     required String password,
     required String fullName,
     required String module,
     required String jobTitle,
     String companyName = '',
-    String phone = '',
     String certifications = '',
   }) {
     return _auth('/api/v1/auth/register', {
-      'email': email,
+      if (email != null && email.isNotEmpty) 'email': email,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
       'password': password,
       'fullName': fullName,
       'module': module,
       'jobTitle': jobTitle,
       'companyName': companyName,
-      'phone': phone,
       'certifications': certifications,
     });
   }
@@ -261,6 +296,41 @@ class ApiClient {
         .toList();
     if (parts.isEmpty) return path;
     return '$path?${parts.join('&')}';
+  }
+
+  /// POST public qui rend la reponse brute, sans lever sur un 409.
+  ///
+  /// Le flux Google s'en sert : un 409 ne signifie pas une panne, mais
+  /// « ce compte n'existe pas encore ». Il faut pouvoir le lire.
+  Future<http.Response> _post(String path, Map<String, dynamic> body) async {
+    if (!_baseUrl.isNotEmpty) {
+      throw const ApiException(0, 'API non configuree (KALENDA_API_URL)');
+    }
+    final request = http.Request('POST', Uri.parse('$baseUrl$path'));
+    request.headers.addAll(const {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Accept': 'application/json',
+    });
+    request.body = jsonEncode(body);
+    final streamed = await _client
+        .send(request)
+        .timeout(const Duration(seconds: 20));
+    return http.Response.fromStream(streamed);
+  }
+
+  /// Memorise les jetons d'une reponse de session.
+  Map<String, dynamic> _readSession(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        response.statusCode,
+        _errorMessage(jsonDecode(utf8.decode(response.bodyBytes)), response),
+      );
+    }
+    final session = Map<String, dynamic>.from(
+      jsonDecode(utf8.decode(response.bodyBytes)) as Map,
+    );
+    setTokensFromResponse(session);
+    return session;
   }
 
   Future<dynamic> _send(
@@ -363,4 +433,54 @@ class ApiException implements Exception {
 
   @override
   String toString() => 'ApiException($statusCode): $message';
+}
+
+/// Le backend ne connait pas encore cette identite Google.
+///
+/// Ce n'est pas une erreur : l'ecran doit derouler le parcours d'inscription
+/// (module, metier, mot de passe) avant d'obtenir une session. On transporte
+/// l'adresse Google pour la proposer, et [requiresLink] indique qu'un compte
+/// existe deja avec cette adresse : il sera relie plutot que duplique.
+class GoogleSignupRequired implements Exception {
+  const GoogleSignupRequired({
+    required this.email,
+    required this.name,
+    required this.requiresLink,
+    required this.message,
+  });
+
+  factory GoogleSignupRequired.fromResponse(http.Response response) {
+    var email = '';
+    var name = '';
+    var requiresLink = false;
+    var message = "Completez votre inscription pour continuer.";
+    try {
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      final error = (decoded is Map ? decoded['error'] : null);
+      if (error is Map) {
+        email = error['email'] as String? ?? '';
+        name = error['name'] as String? ?? '';
+        requiresLink = error['requiresLink'] as bool? ?? false;
+        final text = error['message'];
+        if (text is String && text.isNotEmpty) message = text;
+      }
+    } catch (_) {
+      // Envelope inattendue : on garde le message par defaut plutot que
+      // de faire echouer la connexion sur une erreur de forme.
+    }
+    return GoogleSignupRequired(
+      email: email,
+      name: name,
+      requiresLink: requiresLink,
+      message: message,
+    );
+  }
+
+  final String email;
+  final String name;
+  final bool requiresLink;
+  final String message;
+
+  @override
+  String toString() => 'GoogleSignupRequired: $message';
 }

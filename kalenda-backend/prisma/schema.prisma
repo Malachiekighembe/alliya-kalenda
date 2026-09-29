@@ -33,7 +33,14 @@ enum ActivityPriority {
 
 model User {
   id           String   @id @default(uuid())
-  email        String   @unique
+  /// E-mail de connexion. Nul si l'utilisateur s'est inscrit avec un seul
+  /// numero de telephone : l'un des deux suffit, les deux sont uniques.
+  email        String?  @unique
+  /// Numero au format E.164 (`+243...`), unique lui aussi.
+  phone        String?  @unique @map("phone")
+  /// Identifiant Google (`sub`). Renseigne quand l'utilisateur a relie son
+  /// compte Google : c'est la cle de rapprochement, l'e-mail pouvant changer.
+  googleSub    String?  @unique @map("google_sub")
   passwordHash String   @map("password_hash")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")

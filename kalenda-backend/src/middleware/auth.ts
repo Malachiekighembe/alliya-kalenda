@@ -6,7 +6,7 @@ declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      user?: { id: string; email: string };
+      user?: { id: string; email: string | null };
     }
   }
 }
@@ -23,6 +23,6 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
     return next(unauthorized("Refresh token non accepté ici"));
   }
 
-  req.user = { id: payload.sub, email: payload.email };
+  req.user = { id: payload.sub, email: payload.email ?? null };
   next();
 }

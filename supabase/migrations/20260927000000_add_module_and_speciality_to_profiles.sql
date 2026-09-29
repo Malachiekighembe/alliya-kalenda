@@ -75,6 +75,24 @@ VALUES
     )
 ON CONFLICT ("id") DO NOTHING;
 
+-- Connexion par e-mail OU par numero de telephone, et liaison Google.
+--
+-- `email` devient nullable : un compte peut se creer avec un seul numero.
+-- `google_sub` est la cle de rapprochement Google ; on ne se fie pas a
+-- l'e-mail, qui peut changer, ni au `email` seul, deja porte.
+ALTER TABLE "users"
+    ALTER COLUMN "email" DROP NOT NULL,
+    ADD COLUMN IF NOT EXISTS "phone" TEXT,
+    ADD COLUMN IF NOT EXISTS "google_sub" TEXT;
+
+-- Unicite : plusieurs NULL sont tolérés par PostgreSQL, un compte sans
+-- e-mail ni telephone deja renseigne ne doit pas entrer en conflit.
+CREATE UNIQUE INDEX IF NOT EXISTS "users_phone_key" ON "users" ("phone");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_google_sub_key" ON "users" ("google_sub");
+
+-- L'e-mail reste unique quand il est renseigne.
+CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users" ("email");
+
 -- Module d'activite et specialite.
 --
 -- L'inscription n'est plus un simple formulaire : l'utilisateur choisit un

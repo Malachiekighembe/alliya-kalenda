@@ -18,6 +18,7 @@ import {
   type ApiProfile,
   type FinanceSummary,
   type RegisterInput,
+  type GoogleSignupRequired,
 } from "@/lib/api";
 import {
   mapActivity,
@@ -71,10 +72,21 @@ export interface KalendaContextType {
   /** Vrai quand une session est ouverte et l'API est joignable. */
   isOnline: boolean;
 
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
-  /** Echange un jeton d'identite Google contre une session. */
-  loginWithGoogle: (credential: string) => Promise<void>;
+  /**
+   * Verifie une identite Google. Si le compte est deja relie, la session est
+   * ouverte. Sinon, `signup` est renseigne et l'ecran deroule le parcours
+   * d'inscription avant de rappeler `completeGoogleSignup`.
+   */
+  loginWithGoogle: (
+    credential: string,
+  ) => Promise<{ linked: true } | { linked: false; signup: GoogleSignupRequired }>;
+  /** Acheve l'inscription liee a Google : module, metier, mot de passe. */
+  completeGoogleSignup: (
+    credential: string,
+    input: Omit<RegisterInput, "fullName" | "email">,
+  ) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
 
@@ -258,7 +270,28 @@ export function KalendaProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = async (credential: string) => {
     setError(null);
     try {
-      const session = await api.auth.google(credential);
+      const result = await api.auth.google(credential);
+      if (result.status === "linked") {
+        setTokens(result.session.accessToken, result.session.refreshToken);
+        await adoptSession();
+        return { linked: true } as const;
+      }
+      // Compte inconnu : aucun jeton n'est emis. L'ecran doit completer le
+      // parcours avant d'obtenir une session.
+      return { linked: false, signup: result.signup } as const;
+    } catch (err) {
+      setError(messageOf(err));
+      throw err;
+    }
+  };
+
+  const completeGoogleSignup = async (
+    credential: string,
+    input: Omit<RegisterInput, "fullName" | "email">,
+  ) => {
+    setError(null);
+    try {
+      const session = await api.auth.googleRegister(credential, input);
       setTokens(session.accessToken, session.refreshToken);
       await adoptSession();
     } catch (err) {
@@ -501,6 +534,7 @@ export function KalendaProvider({ children }: { children: React.ReactNode }) {
     login,
     register,
     loginWithGoogle,
+    completeGoogleSignup,
     logout,
     refresh: load,
     addProject,

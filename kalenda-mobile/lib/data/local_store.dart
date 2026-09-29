@@ -104,14 +104,18 @@ class LocalStore extends ChangeNotifier {
     }
   }
 
-  Future<void> login(String email, String password) async {
+  /// Connexion par e-mail OU par numero de telephone.
+  Future<void> login(String identifier, String password) async {
     errorMessage = null;
     _requireApi();
-    await _api.login(email.trim(), password);
+    await _api.login(identifier.trim(), password);
     await _adoptSession();
   }
 
   /// Ouvre une session a partir d'un jeton d'identite Google.
+  ///
+  /// Si le backend ne connait pas ce compte, il leve
+  /// [GoogleSignupRequired] : l'appelant bascule alors sur le parcours.
   Future<void> loginWithGoogle(String credential) async {
     errorMessage = null;
     _requireApi();
@@ -119,26 +123,50 @@ class LocalStore extends ChangeNotifier {
     await _adoptSession();
   }
 
+  /// Acheve l'inscription d'une identite Google et ouvre la session.
+  Future<void> registerWithGoogle({
+    required String credential,
+    required String password,
+    required String module,
+    required String jobTitle,
+    String companyName = '',
+    String? phone,
+    String certifications = '',
+  }) async {
+    errorMessage = null;
+    _requireApi();
+    await _api.registerWithGoogle(
+      credential: credential,
+      password: password,
+      module: module,
+      jobTitle: jobTitle,
+      companyName: companyName,
+      phone: phone,
+      certifications: certifications,
+    );
+    await _adoptSession();
+  }
+
   Future<void> register({
-    required String email,
+    String? email,
+    String? phone,
     required String password,
     required String fullName,
     required String module,
     required String jobTitle,
     String companyName = '',
-    String phone = '',
     String certifications = '',
   }) async {
     errorMessage = null;
     _requireApi();
     await _api.register(
       email: email,
+      phone: phone,
       password: password,
       fullName: fullName,
       module: module,
       jobTitle: jobTitle,
       companyName: companyName,
-      phone: phone,
       certifications: certifications,
     );
     await _adoptSession();

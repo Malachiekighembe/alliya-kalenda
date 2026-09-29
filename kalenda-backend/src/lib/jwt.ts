@@ -2,8 +2,14 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import { config } from "../config";
 
 export interface TokenPayload {
+  /** Identifiant du compte : c'est lui qui fait foi. */
   sub: string;
-  email: string;
+  /**
+   * E-mail, a titre informatif seulement. Il peut etre nul : un compte peut
+   * avoir ete cree avec un seul numero de telephone. Aucun droit ne se
+   * deduit de ce champ, tout passe par `sub`.
+   */
+  email?: string | null;
   type: "access" | "refresh";
 }
 
@@ -40,10 +46,12 @@ export function verifyToken(token: string): TokenPayload | null {
     if (typeof decoded === "string") return null;
     const { sub, email, type } = decoded as jwt.JwtPayload &
       Partial<TokenPayload>;
-    if (!sub || !email || (type !== "access" && type !== "refresh")) {
+    // Seul `sub` est obligatoire : l'e-mail peut manquer sur un compte cree
+    // avec un numero de telephone.
+    if (!sub || (type !== "access" && type !== "refresh")) {
       return null;
     }
-    return { sub, email, type };
+    return { sub, email: email ?? null, type };
   } catch {
     return null;
   }
