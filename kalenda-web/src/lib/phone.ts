@@ -54,6 +54,28 @@ export const COUNTRIES: Country[] = [
 
 export const DEFAULT_COUNTRY = "CD";
 
+/**
+ * Filtre la liste : sur le nom, l'indicatif ou le code pays.
+ *
+ * Le nom est compare sans accent ni casse, pour que « cote » trouve
+ * « Côte d'Ivoire ».
+ */
+export function filterCountries(query: string) {
+  // Plage de diacritiques combinants. Elle passe par une chaine pour rester
+  // lisible dans le source : ecrit en litteral, le motif serait invisible.
+  const strip = new RegExp("[\\u0300-\\u036f]", "g");
+  const fold = (value: string) =>
+    value.trim().toLowerCase().normalize("NFD").replace(strip, "");
+  const needle = fold(query);
+  if (!needle) return COUNTRIES;
+  return COUNTRIES.filter(
+    (country) =>
+      fold(country.label).includes(needle) ||
+      country.code.toLowerCase().includes(needle) ||
+      country.dial.includes(needle),
+  );
+}
+
 /** Retire tout ce qui n'est pas un chiffre d'un numero national. */
 export function nationalDigits(value: string) {
   return value.replace(/[^\d]/g, "");

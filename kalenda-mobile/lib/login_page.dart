@@ -31,6 +31,9 @@ bool get _googleEnabled => _googleClientId.trim().isNotEmpty;
 /// Etapes du parcours d'inscription, dans l'ordre.
 const _steps = ['Identité', 'Module', 'Métier'];
 
+/// Mode de saisie du champ identifiant.
+enum _IdKind { email, phone }
+
 /// Ecran de connexion et d'inscription d'Alliya Kalenda.
 ///
 /// L'inscription n'est pas un formulaire : c'est un parcours en trois etapes.
@@ -75,6 +78,9 @@ class _LoginPageState extends State<LoginPage> {
 
   /// Pays dont l'indicatif est applique aux numeros saisis.
   String _country = kDefaultCountry;
+
+  /// E-mail ou telephone : le choix est fait au bouton, pas deduit.
+  _IdKind _identifierKind = _IdKind.email;
 
   // Catalogue servi par l'API.
   List<KalendaModule> _modules = const [];
@@ -197,11 +203,15 @@ class _LoginPageState extends State<LoginPage> {
           certifications: value('certifications'),
         );
       } else if (_register) {
-        final identifier = toIdentifier(_identifier.text, dialFor(_country));
-        final isEmail = identifier.contains('@');
+        // Le mode choisi decide du champ envoye : on n'en deduit rien de la
+        // saisie, l'utilisateur l'a choisi explicitement.
+        final byPhone = _identifierKind == _IdKind.phone;
+        final identifier = byPhone
+            ? toIdentifier(_identifier.text, dialFor(_country))
+            : _identifier.text.trim();
         await widget.store.register(
-          email: isEmail ? identifier : null,
-          phone: isEmail ? null : identifier,
+          email: byPhone ? null : identifier,
+          phone: byPhone ? identifier : null,
           password: _password.text,
           fullName: _fullName.text.trim(),
           module: _moduleId ?? '',
@@ -210,8 +220,11 @@ class _LoginPageState extends State<LoginPage> {
           certifications: value('certifications'),
         );
       } else {
+        final byPhone = _identifierKind == _IdKind.phone;
         await widget.store.login(
-          toIdentifier(_identifier.text, dialFor(_country)),
+          byPhone
+              ? toIdentifier(_identifier.text, dialFor(_country))
+              : _identifier.text.trim(),
           _password.text,
         );
       }
@@ -716,44 +729,119 @@ class _LoginPageState extends State<LoginPage> {
         (value == null || value.trim().isEmpty) ? 'Champ requis' : null,
   );
 
-  /// Un seul champ pour l'e-mail ou le numero : le backend tranche sur la
-  /// presence d'un « @ ». L'indicatif pays n'est ajoute que pour un numero.
+  /// Un seul champ pour l'e-mail ou le numero : le choix est fait au
+  /// bouton, pas deduit de ce que l'utilisateur tape.
   Widget _identifierField() {
-    return TextFormField(
-      controller: _identifier,
-      keyboardType: TextInputType.text,
-      textInputAction: TextInputAction.next,
-      style: const TextStyle(fontSize: 14),
-      decoration: _input(
-        'E-mail ou numéro de téléphone',
-        hint: 'ex. 81 000 0000',
-        prefix: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _country,
-            isDense: true,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Color(0xff16202c),
-            ),
-            // Un e-mail passe au travers : le select devient sans effet.
-            onChanged: (value) =>
-                setState(() => _country = value ?? kDefaultCountry),
-            items: kCountries
-                .map(
-                  (c) => DropdownMenuItem(
-                    value: c.code,
-                    child: Text('+${c.dial} ${c.code}'),
+    final byPhone = _identifierKind == _IdKind.phone;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Deux onglets plutot qu'un champ melange : l'utilisateur sait ce
+        // qui est attendu, et l'indicatif n'apparait que s'il est utile.
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: const Color(0xfff7fafc),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              for (final kind in _IdKind.values)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _identifierKind = kind),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _identifierKind == kind
+                            ? Colors.white
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: _identifierKind == kind
+                            ? const [
+                                BoxShadow(
+                                  color: Color(0x140b2240),
+                                  blurRadius: 4,
+                                  offset: Offset(0, 1),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        kind == _IdKind.email ? 'E-mail' : 'Téléphone',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: _identifierKind == kind
+                              ? kAccent
+                              : const Color(0xff6b7c8d),
+                        ),
+                      ),
+                    ),
                   ),
-                )
-                .toList(),
+                ),
+            ],
           ),
         ),
-      ),
-      validator: (value) => (value == null || value.trim().length < 3)
-          ? 'Saisissez votre e-mail ou votre numéro'
-          : null,
+        const SizedBox(height: 12),
+        if (byPhone)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CountryButton(country: _country, onTap: _pickCountry),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: _identifier,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.next,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: _input('Numéro de téléphone'),
+                  validator: (value) =>
+                      (value == null || value.trim().length < 3)
+                      ? 'Saisissez votre numéro'
+                      : null,
+                ),
+              ),
+            ],
+          )
+        else
+          TextFormField(
+            controller: _identifier,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            style: const TextStyle(fontSize: 14),
+            decoration: _input(
+              'Adresse e-mail',
+              hint: 'ex. contact@alliyakalenda.cd',
+            ),
+            validator: (value) {
+              final text = value?.trim() ?? '';
+              if (text.isEmpty) return 'Saisissez votre e-mail';
+              if (!text.contains('@')) return 'E-mail invalide';
+              return null;
+            },
+          ),
+      ],
     );
+  }
+
+  /// Bouton affichant l'indicatif courant ; il ouvre la feuille de recherche.
+  Future<void> _pickCountry() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) => _CountrySheet(
+        selected: _country,
+        onSelected: (code) => Navigator.of(context).pop(code),
+      ),
+    );
+    if (selected != null) setState(() => _country = selected);
   }
 
   Widget _passwordField() => TextFormField(
@@ -1328,6 +1416,172 @@ class _OrDivider extends StatelessWidget {
       const Expanded(child: Divider(height: 1, color: Color(0xffe3eaf1))),
     ],
   );
+}
+
+/// Bouton affichant l'indicatif courant, aligne sur la hauteur d'un champ.
+class _CountryButton extends StatelessWidget {
+  const _CountryButton({required this.country, required this.onTap});
+
+  final String country;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final dial = dialFor(country);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xfff7fafc),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xffe3eaf1)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '+$dial',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xff16202c),
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: Color(0xff9aa9b8),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Feuille de recherche du pays.
+///
+/// Une liste de trente entrees dans une liste deroulante est inutilisable sur
+/// telephone : la feuille ajoute un champ de recherche et filtre sur le nom,
+/// l'indicatif ou le code.
+class _CountrySheet extends StatefulWidget {
+  const _CountrySheet({required this.selected, required this.onSelected});
+
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<_CountrySheet> createState() => _CountrySheetState();
+}
+
+class _CountrySheetState extends State<_CountrySheet> {
+  final _query = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final results = filterCountries(_search);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xffe3eaf1),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _query,
+                autofocus: true,
+                onChanged: (value) => setState(() => _search = value),
+                decoration: const InputDecoration(
+                  hintText: 'Rechercher un pays…',
+                  prefixIcon: Icon(Icons.search_rounded, size: 20),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: results.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Aucun pays trouvé. Saisissez l’indicatif dans le champ.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Color(0xff6b7c8d),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.only(bottom: 8),
+                      itemCount: results.length,
+                      itemBuilder: (context, index) {
+                        final country = results[index];
+                        final active = country.code == widget.selected;
+                        return ListTile(
+                          dense: true,
+                          selected: active,
+                          selectedTileColor: kAccent.withValues(alpha: .08),
+                          onTap: () => widget.onSelected(country.code),
+                          leading: SizedBox(
+                            width: 52,
+                            child: Text(
+                              '+${country.dial}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff16202c),
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            country.label,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: active ? FontWeight.w700 : null,
+                              color: active ? kAccent : const Color(0xff16202c),
+                            ),
+                          ),
+                          trailing: active
+                              ? const Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 18,
+                                  color: kAccent,
+                                )
+                              : null,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Bandeau d'information non bloquant.

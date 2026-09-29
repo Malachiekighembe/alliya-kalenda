@@ -144,6 +144,32 @@ String toIdentifier(String value, String dial) {
   return digits.isEmpty ? trimmed : '+$dial$digits';
 }
 
+/// Filtre la liste des pays : nom, indicatif ou code.
+///
+/// Le nom est compare sans accent ni casse, pour que « cote » trouve
+/// « Côte d'Ivoire ».
+List<Country> filterCountries(String query) {
+  final needle = _fold(query);
+  if (needle.isEmpty) return kCountries;
+  return kCountries
+      .where(
+        (c) =>
+            _fold(c.label).contains(needle) ||
+            c.code.toLowerCase().contains(needle) ||
+            c.dial.contains(needle),
+      )
+      .toList();
+}
+
+/// Minuscule sans accent, pour une recherche tolerante.
+///
+/// La plage de diacritiques passe par une chaine pour rester lisible :
+/// ecrite en litteral, elle serait invisible dans le source.
+String _fold(String value) {
+  final strip = RegExp('[\u0300-\u036f]');
+  return value.toLowerCase().replaceAll(strip, '');
+}
+
 /// Client HTTP de l'API Alliya Kalenda (kalenda-backend).
 ///
 /// L'URL de base est injectee a la compilation :

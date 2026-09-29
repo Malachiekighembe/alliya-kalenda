@@ -11,7 +11,12 @@ import {
   type RegisterInput,
 } from "@/lib/api";
 import { findModule, isAvailable, type KalendaModuleDef } from "@/lib/modules";
-import { COUNTRIES, DEFAULT_COUNTRY, toIdentifier } from "@/lib/phone";
+import {
+  COUNTRIES,
+  DEFAULT_COUNTRY,
+  filterCountries,
+  toIdentifier,
+} from "@/lib/phone";
 import { useKalenda } from "@/context/kalenda-context";
 
 /** Etapes du parcours d'inscription, dans l'ordre. */
@@ -177,6 +182,105 @@ function GoogleMark() {
         d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"
       />
     </svg>
+  );
+}
+
+/**
+ * Selecteur de pays avec recherche.
+ *
+ * Un simple `<select>` devient illisible des trente pays, et sans recherche
+ * sur mobile. Le bouton ouvre un panneau avec champ de recherche ; la liste
+ * se filtre sur le nom, l'indicatif ou le code.
+ */
+function CountryPicker({
+  country,
+  onChange,
+  field,
+}: {
+  country: string;
+  onChange: (code: string) => void;
+  field: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const current =
+    COUNTRIES.find((item) => item.code === country) ?? COUNTRIES[0];
+  const results = filterCountries(query);
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Changer d'indicatif pays"
+        className={`${field} flex items-center justify-between gap-1 pr-2`}
+      >
+        <span className="truncate">
+          +{current.dial} {current.code}
+        </span>
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-navy/50" aria-hidden="true">
+          <path d="M7 10l5 5 5-5z" />
+        </svg>
+      </button>
+
+      {open ? (
+        <>
+          {/* Clic dehors pour fermer, sans gestionnaire global. */}
+          <button
+            type="button"
+            aria-label="Fermer la liste des pays"
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute left-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-lg border border-card-border bg-white shadow-soft">
+            <div className="border-b border-card-border p-2">
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Rechercher un pays…"
+                className="w-full rounded-md border border-card-border bg-surface-low px-2 py-1.5 text-[12.5px] outline-none focus:border-accent"
+              />
+            </div>
+            <ul role="listbox" className="max-h-56 overflow-y-auto">
+              {results.length === 0 ? (
+                <li className="px-3 py-2 text-[12px] text-navy/50">
+                  Aucun pays trouvé. Saisissez l&apos;indicatif dans le champ.
+                </li>
+              ) : (
+                results.map((item) => (
+                  <li key={item.code}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={item.code === country}
+                      onClick={() => {
+                        onChange(item.code);
+                        setOpen(false);
+                        setQuery("");
+                      }}
+                      className={
+                        "flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] " +
+                        (item.code === country
+                          ? "bg-accent/10 font-bold text-accent"
+                          : "text-navy/75 hover:bg-surface-low")
+                      }
+                    >
+                      <span className="w-11 shrink-0 font-bold">
+                        +{item.dial}
+                      </span>
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -434,7 +538,11 @@ export default function LoginPage() {
   // Un seul champ : e-mail ou numero. Le backend decide via la presence
   // d'un « @ », et nous n'imposons pas de choisir a l'avance.
   const [identifier, setIdentifier] = useState("");
-  // Indicatif pays, applique quand la saisie est un numero et non un e-mail.
+  // E-mail ou telephone : le choix est explicite, pas deduit de la saisie.
+  const [identifierKind, setIdentifierKind] = useState<"email" | "phone">(
+    "email",
+  );
+  // Indicatif pays, applique quand le mode telephone est choisi.
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const dial = COUNTRIES.find((c) => c.code === country)?.dial ?? "243";
   const [password, setPassword] = useState("");
@@ -558,12 +666,14 @@ export default function LoginPage() {
           ...(speciality.phone ? { phone: speciality.phone } : {}),
         });
       } else {
-        const isEmail = identifier.includes("@");
-        const composed = toIdentifier(identifier, dial);
+        const composed =
+          identifierKind === "phone"
+            ? toIdentifier(identifier, dial)
+            : identifier.trim();
         const payload: RegisterInput = {
-          ...(isEmail
-            ? { email: composed }
-            : { phone: composed }),
+          ...(identifierKind === "phone"
+            ? { phone: composed }
+            : { email: composed }),
           password,
           fullName: fullName.trim(),
           module: moduleId ?? "",
@@ -737,40 +847,67 @@ export default function LoginPage() {
                 ) : null}
                 {mode === "register" && pendingGoogle ? null : (
                   <div>
-                    <label
-                      htmlFor="identifier"
-                      className="text-[12px] font-bold text-navy"
+                    {/* Choix explicite : un seul champ melangeant les deux
+                        oblige a deviner ce qui est attendu. */}
+                    <div
+                      role="tablist"
+                      aria-label="Méthode de connexion"
+                      className="mb-2 flex gap-1 rounded-lg bg-surface-low p-1"
                     >
-                      E-mail ou numéro de téléphone
-                    </label>
-                    <div className="mt-1 flex gap-2">
-                      {/* L'indicatif ne sert que pour un numero ; un e-mail
-                          passe au travers, le select devient sans effet. */}
-                      <select
-                        aria-label="Indicatif du pays"
-                        value={country}
-                        onChange={(e) => setCountry(e.target.value)}
-                        className={
-                          field.replace("w-full", "w-[124px] shrink-0 pr-6")
-                        }
-                      >
-                        {COUNTRIES.map((item) => (
-                          <option key={item.code} value={item.code}>
-                            +{item.dial} {item.code}
-                          </option>
-                        ))}
-                      </select>
+                      {(
+                        [
+                          { id: "email", label: "E-mail" },
+                          { id: "phone", label: "Téléphone" },
+                        ] as const
+                      ).map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={identifierKind === option.id}
+                          onClick={() => setIdentifierKind(option.id)}
+                          className={
+                            "flex-1 rounded-md px-2 py-1.5 text-[12px] font-bold transition " +
+                            (identifierKind === option.id
+                              ? "bg-white text-accent shadow-sm"
+                              : "text-navy/55")
+                          }
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {identifierKind === "phone" ? (
+                      <div className="flex gap-2">
+                        <CountryPicker
+                          country={country}
+                          onChange={setCountry}
+                          field={field.replace("mt-1 ", " ")}
+                        />
+                        <input
+                          id="identifier"
+                          type="tel"
+                          required
+                          value={identifier}
+                          onChange={(e) => setIdentifier(e.target.value)}
+                          className={field.replace("mt-1 ", " ")}
+                          placeholder="81 000 0000"
+                          autoComplete="tel-national"
+                        />
+                      </div>
+                    ) : (
                       <input
                         id="identifier"
-                        type="text"
+                        type="email"
                         required
                         value={identifier}
                         onChange={(e) => setIdentifier(e.target.value)}
-                        className={field.replace("mt-1 ", " ")}
-                        placeholder="ex. 81 000 0000"
-                        autoComplete="username"
+                        className={field}
+                        placeholder="ex. contact@alliyakalenda.cd"
+                        autoComplete="email"
                       />
-                    </div>
+                    )}
                   </div>
                 )}
                 <TextField

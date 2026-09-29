@@ -15,12 +15,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alliya Kalenda",
+  // `title.template` évite qu'un onglet affiche seulement « Connexion » :
+  // le nom du produit reste visible.
+  title: {
+    default: "Alliya Kalenda — Outil métier",
+    template: "%s · Alliya Kalenda",
+  },
+  applicationName: "Alliya Kalenda",
   description:
-    "Alliya Kalenda — suivi de chantiers, agenda et finances pour ingénieurs et conducteurs de travaux.",
+    "Alliya Kalenda — agenda, chantiers, finances et rapports pour les équipes de terrain.",
+  appleWebApp: {
+    title: "Alliya Kalenda",
+  },
+  // `/icon.png` sert de favicon : le `favicon.ico` Vercel par défaut a été
+  // retiré, la convention fichier primant sur ces métadonnées.
   icons: {
     icon: "/icon.png",
     apple: "/icon.png",
+    shortcut: "/icon.png",
   },
 };
 
