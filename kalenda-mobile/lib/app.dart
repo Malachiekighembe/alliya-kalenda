@@ -80,7 +80,10 @@ class _AlliyaKalendaAppState extends State<AlliyaKalendaApp> {
         backgroundColor: kAppBackground,
         surfaceTintColor: Colors.transparent,
       ),
-      splashFactory: InkSparkle.splashFactory,
+      // `InkSparkle` exige le shader `shaders/ink_sparkle.frag`, absent du
+      // projet : il leve une exception des qu'un widget s'en sert. `InkRipple`
+      // rend le meme effet sans ajouter d'asset a embarquer.
+      splashFactory: InkRipple.splashFactory,
       highlightColor: const Color(0x222e6fd6),
       dividerTheme: const DividerThemeData(
         color: kCardBorder,

@@ -1,10 +1,16 @@
 /**
  * Selection de l'indicatif pays pour la connexion par telephone.
  *
+ * La liste vient de `world-countries` : tous les pays et territoires
+ * reconnus, avec leur nom en francais et leur indicatif telephonique. Une
+ * liste saisie a la main oublie des territoires et devient fausse a chaque
+ * ajout de pays.
+ *
  * L'utilisateur saisit son numero national ; l'indicatif est ajoute par le
  * client avant l'envoi. Le backend normalise ensuite (espaces, tirets,
  * parentheses) avant de comparer au compte, ce qui rend la saisie tolerant.
  */
+import countries from "world-countries";
 
 export type Country = {
   /** Code ISO 3166-1 alpha-2. */
@@ -15,44 +21,61 @@ export type Country = {
 };
 
 /**
- * Liste volontairement restreinte aux pays francophones et voisins, plus
- * quelques pays frequents. Un numero hors liste reste saisissable en ecrivant
- * l'indicatif complet dans le champ.
+ * Indicatif international d'un pays.
+ *
+ * Les indicatifs partages par plusieurs pays sont des codes complets a eux
+ * seuls : « +1 » pour la zone NANP (Etats-Unis, Canada…) et « +7 » pour
+ * la Russie et le Kazakhstan. Leurs `suffixes` sont des codes regionaux, pas
+ * des codes nationaux — les lire donnerait « +73 » pour la Russie.
+ *
+ * Ailleurs, l'indicatif est la racine suivi du suffixe, tronque a trois
+ * chiffres, la longueur maximale d'un code ITU.
  */
-export const COUNTRIES: Country[] = [
-  { code: "CD", dial: "243", label: "République démocratique du Congo" },
-  { code: "CG", dial: "242", label: "Congo" },
-  { code: "CI", dial: "225", label: "Côte d'Ivoire" },
-  { code: "CM", dial: "237", label: "Cameroun" },
-  { code: "CF", dial: "236", label: "République centrafricaine" },
-  { code: "GA", dial: "241", label: "Gabon" },
-  { code: "GQ", dial: "240", label: "Guinée équatoriale" },
-  { code: "TD", dial: "235", label: "Tchad" },
-  { code: "AO", dial: "244", label: "Angola" },
-  { code: "ZM", dial: "260", label: "Zambie" },
-  { code: "MA", dial: "212", label: "Maroc" },
-  { code: "DZ", dial: "213", label: "Algérie" },
-  { code: "TN", dial: "216", label: "Tunisie" },
-  { code: "SN", dial: "221", label: "Sénégal" },
-  { code: "ML", dial: "223", label: "Mali" },
-  { code: "BF", dial: "226", label: "Burkina Faso" },
-  { code: "NE", dial: "227", label: "Niger" },
-  { code: "BJ", dial: "229", label: "Bénin" },
-  { code: "GN", dial: "224", label: "Guinée" },
-  { code: "RW", dial: "250", label: "Rwanda" },
-  { code: "BI", dial: "257", label: "Burundi" },
-  { code: "UG", dial: "256", label: "Ouganda" },
-  { code: "KE", dial: "254", label: "Kenya" },
-  { code: "TZ", dial: "255", label: "Tanzanie" },
-  { code: "MG", dial: "261", label: "Madagascar" },
-  { code: "MU", dial: "230", label: "Maurice" },
-  { code: "FR", dial: "33", label: "France" },
-  { code: "BE", dial: "32", label: "Belgique" },
-  { code: "CH", dial: "41", label: "Suisse" },
-  { code: "CA", dial: "1", label: "Canada" },
-];
+function dialOf(entry: (typeof countries)[number]): string | null {
+  const root = entry.idd?.root;
+  if (!root) return null;
+  const digits = root.replace(/^\+/, "");
+  if (digits === "1" || digits === "7") return digits;
+  const suffix = entry.idd?.suffixes?.[0];
+  if (!suffix) return /^\d{1,3}$/.test(digits) ? digits : null;
+  const dial = `${digits}${suffix}`.slice(0, 3);
+  return /^\d{2,3}$/.test(dial) ? dial : null;
+}
+
+function buildCountries(): Country[] {
+  const list: Country[] = [];
+  for (const entry of countries) {
+    const dial = dialOf(entry);
+    if (!dial) continue;
+    const label = entry.translations?.fra?.common ?? entry.name.common;
+    list.push({ code: entry.cca2, dial, label });
+  }
+  // Ordre alphabétique sur le nom francais : l'utilisateur cherche un nom.
+  return list.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+}
+
+export const COUNTRIES: Country[] = buildCountries();
 
 export const DEFAULT_COUNTRY = "CD";
+
+/** Retire tout ce qui n'est pas un chiffre d'un numero national. */
+export function nationalDigits(value: string) {
+  return value.replace(/[^\d]/g, "");
+}
+
+/**
+ * Compose l'identifiant transmis au backend.
+ *
+ * Un e-mail est renvoye tel quel ; un numero recoit l'indicatif du pays
+ * choisi. Si l'utilisateur a deja saisi l'indicatif, on ne l'ajoute pas deux
+ * fois.
+ */
+export function toIdentifier(value: string, dial: string) {
+  const trimmed = value.trim();
+  if (trimmed.includes("@") || trimmed.startsWith("+")) return trimmed;
+  const digits = nationalDigits(trimmed);
+  return digits ? `+${dial}${digits}` : trimmed;
+}
 
 /**
  * Filtre la liste : sur le nom, l'indicatif ou le code pays.
@@ -74,23 +97,4 @@ export function filterCountries(query: string) {
       country.code.toLowerCase().includes(needle) ||
       country.dial.includes(needle),
   );
-}
-
-/** Retire tout ce qui n'est pas un chiffre d'un numero national. */
-export function nationalDigits(value: string) {
-  return value.replace(/[^\d]/g, "");
-}
-
-/**
- * Compose l'identifiant transmis au backend.
- *
- * Un e-mail est renvoye tel quel ; un numero recoit l'indicatif du pays
- * choisi. Si l'utilisateur a deja saisi l'indicatif, on ne l'ajoute pas deux
- * fois.
- */
-export function toIdentifier(value: string, dial: string) {
-  const trimmed = value.trim();
-  if (trimmed.includes("@") || trimmed.startsWith("+")) return trimmed;
-  const digits = nationalDigits(trimmed);
-  return digits ? `+${dial}${digits}` : trimmed;
 }

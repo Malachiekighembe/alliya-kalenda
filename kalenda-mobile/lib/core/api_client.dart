@@ -1,5 +1,9 @@
 import 'dart:convert';
 
+import 'package:country_picker/country_picker.dart';
+// `Locale` vient de Flutter, pas du SDK : sans cet import, la
+// localisation des noms de pays ne compile pas.
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:http/http.dart' as http;
 
 /// Un module d'activite, tel que renvoye par GET /api/v1/modules.
@@ -88,43 +92,29 @@ class Country {
   final String label;
 }
 
-/// Pays proposes pour la connexion par telephone.
+/// Noms de pays en francais, fournis par `country_picker`.
+final CountryLocalizations _fr = CountryLocalizations(const Locale('fr'));
+
+/// Tous les pays proposes pour la connexion par telephone.
 ///
-/// Liste volontairement restreinte aux pays francophones et voisins, plus
-/// quelques pays frequents. Un numero hors liste reste saisissable en
-/// ecrivant l'indicatif complet dans le champ.
-const List<Country> kCountries = [
-  Country('CD', '243', 'République démocratique du Congo'),
-  Country('CG', '242', 'Congo'),
-  Country('CI', '225', "Côte d'Ivoire"),
-  Country('CM', '237', 'Cameroun'),
-  Country('CF', '236', 'République centrafricaine'),
-  Country('GA', '241', 'Gabon'),
-  Country('GQ', '240', 'Guinée équatoriale'),
-  Country('TD', '235', 'Tchad'),
-  Country('AO', '244', 'Angola'),
-  Country('ZM', '260', 'Zambie'),
-  Country('MA', '212', 'Maroc'),
-  Country('DZ', '213', 'Algérie'),
-  Country('TN', '216', 'Tunisie'),
-  Country('SN', '221', 'Sénégal'),
-  Country('ML', '223', 'Mali'),
-  Country('BF', '226', 'Burkina Faso'),
-  Country('NE', '227', 'Niger'),
-  Country('BJ', '229', 'Bénin'),
-  Country('GN', '224', 'Guinée'),
-  Country('RW', '250', 'Rwanda'),
-  Country('BI', '257', 'Burundi'),
-  Country('UG', '256', 'Ouganda'),
-  Country('KE', '254', 'Kenya'),
-  Country('TZ', '255', 'Tanzanie'),
-  Country('MG', '261', 'Madagascar'),
-  Country('MU', '230', 'Maurice'),
-  Country('FR', '33', 'France'),
-  Country('BE', '32', 'Belgique'),
-  Country('CH', '41', 'Suisse'),
-  Country('CA', '1', 'Canada'),
-];
+/// La liste vient de `country_picker` : tous les pays reconnus, avec leur
+/// indicatif. Une liste saisie a la main oublie des territoires et devient
+/// fausse a chaque ajout.
+final List<Country> kCountries =
+    CountryService()
+        .getAll()
+        .where((c) => c.phoneCode.isNotEmpty && c.countryCode != 'WW')
+        .map(
+          (c) => Country(
+            c.countryCode,
+            c.phoneCode,
+            // Nom francais quand le paquet le fournit, anglais sinon.
+            _fr.countryName(countryCode: c.countryCode) ?? c.name,
+          ),
+        )
+        .toList()
+      // Ordre alphabétique : l'utilisateur cherche un nom.
+      ..sort((a, b) => a.label.compareTo(b.label));
 
 const String kDefaultCountry = 'CD';
 
@@ -170,10 +160,6 @@ String _fold(String value) {
   return value.toLowerCase().replaceAll(strip, '');
 }
 
-/// Client HTTP de l'API Alliya Kalenda (kalenda-backend).
-///
-/// L'URL de base est injectee a la compilation :
-///
 /// ```sh
 /// flutter run --dart-define=KALENDA_API_URL=https://api.exemple.com
 /// ```
