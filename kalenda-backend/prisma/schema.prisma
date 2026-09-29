@@ -56,19 +56,49 @@ model User {
 }
 
 model Profile {
-  id                 String   @id
-  user               User     @relation(fields: [id], references: [id], onDelete: Cascade)
-  fullName           String   @default("") @map("full_name")
-  companyName        String   @default("") @map("company_name")
-  phone              String   @default("")
-  currency           String   @default("USD")
-  dateFormat         String   @default("dd/MM/yyyy") @map("date_format")
-  notificationsEnabled Boolean @default(true) @map("notifications_enabled")
-  darkMode           Boolean  @default(false) @map("dark_mode")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                   String   @id
+  user                 User     @relation(fields: [id], references: [id], onDelete: Cascade)
+  fullName             String   @default("") @map("full_name")
+  /// Module d'activite choisi a l'inscription (electricite, plomberie, ...).
+  module               String   @default("electricite")
+  /// Metier exerce : specialite du module (electricien, automaticien, ...).
+  jobTitle             String   @default("") @map("job_title")
+  /// Habilitations et certifications declarees.
+  certifications       String   @default("")
+  companyName          String   @default("") @map("company_name")
+  phone                String   @default("")
+  currency             String   @default("USD")
+  dateFormat           String   @default("dd/MM/yyyy") @map("date_format")
+  notificationsEnabled Boolean  @default(true) @map("notifications_enabled")
+  darkMode             Boolean  @default(false) @map("dark_mode")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   @@map("profiles")
+}
+
+/// Module d'activite propose a l'inscription.
+///
+/// Le catalogue vit en base et non dans le code : ajouter un module revient a
+/// inserer une ligne, les clients la lisent via GET /api/v1/modules.
+/// `available = false` annonce un module en cours, non selectionnable.
+model Module {
+  id          String   @id
+  label       String
+  status      String   @default("planned")
+  promise     String   @default("")
+  cover       String   @default("")
+  icon        String   @default("")
+  /// Fonctions mises en avant, stockees en JSON : ["icon", "texte"].
+  highlights  Json     @default("[]")
+  /// Champs de specialite demandes au compte : JSON, meme forme que
+  /// `highlights` mais [{ key, label, type, options, optional }].
+  fields      Json     @default("[]")
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("modules")
 }
 
 model Project {
@@ -290,15 +320,15 @@ model ProgressEvent {
 }
 
 model Conversation {
-  id             String    @id @default(uuid())
-  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  ownerId        String    @map("owner_id")
-  project        Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectId      String?   @map("project_id")
+  id             String   @id @default(uuid())
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId        String   @map("owner_id")
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId      String?  @map("project_id")
   title          String
-  recipientLabel String    @default("") @map("recipient_label")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  recipientLabel String   @default("") @map("recipient_label")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   messages Message[]
 

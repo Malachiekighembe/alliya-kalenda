@@ -9,3 +9,6 @@
 *.log
 .vscode/
 
+# Supabase CLI — config locale de lien (contient le project-ref)
+supabase/.temp/
+

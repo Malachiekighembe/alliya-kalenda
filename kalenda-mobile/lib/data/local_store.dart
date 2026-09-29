@@ -1,263 +1,546 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/api_client.dart';
 import '../core/project_cover.dart';
 import '../domain/models.dart';
 
+/// Etat de l'application cote donnees.
+enum SyncStatus { unauthenticated, loading, ready, error, unconfigured }
+
+/// Source de donnees unique de l'application.
+///
+/// Le backend est la seule source de verite : aucune donnee de demonstration
+/// n'est conservee en local. `SharedPreferences` ne sert plus qu'a memoriser les
+/// tokens JWT, afin de ne pas se reconnecter a chaque lancement.
 class LocalStore extends ChangeNotifier {
-  LocalStore(this._preferences) {
-    _load();
+  LocalStore(this._preferences, {ApiClient? api}) : _api = api ?? ApiClient() {
+    _api.onTokensChanged = _persistTokens;
+    _restoreSession();
   }
 
   final SharedPreferences _preferences;
+  final ApiClient _api;
+
   final List<Project> projects = [];
   final List<ChatMessage> messages = [];
-  bool isReady = false;
+  final List<Activity> activities = [];
+  final List<Payment> payments = [];
+  final List<Conversation> conversations = [];
+  final List<Person> people = [];
+  final List<Report> reports = [];
 
-  final conversations = const [
-    Conversation(
-      id: 'team-kasai',
-      title: 'Équipe Résidence Kasaï',
-      subtitle: 'Chef de chantier · 4 membres',
-      initials: 'RK',
-      projectName: 'Résidence Kasaï',
-      unread: 2,
-    ),
-    Conversation(
-      id: 'atelier',
-      title: 'Atelier Kalenda',
-      subtitle: 'Aline, Patrick et 2 autres',
-      initials: 'AK',
-      projectName: 'Atelier Kalenda',
-      unread: 0,
-    ),
-    Conversation(
-      id: 'direction',
-      title: 'Direction travaux',
-      subtitle: 'Groupe interne · 6 membres',
-      initials: 'DT',
-      projectName: 'Tous les projets',
-      unread: 1,
-    ),
-  ];
+  SyncStatus status = SyncStatus.unauthenticated;
+  String? errorMessage;
+  String? userEmail;
 
-  final List<Activity> activities = const [
-    Activity(
-      title: 'Contrôle ferraillage fondations',
-      project: 'Résidence Kasaï',
-      time: '08:00',
-      priority: 'Urgente',
-      status: 'En cours',
-    ),
-    Activity(
-      title: 'Réception du ciment',
-      project: 'Atelier Kalenda',
-      time: '10:30',
-      priority: 'Haute',
-      status: 'À faire',
-    ),
-    Activity(
-      title: 'Point équipe chantier',
-      project: 'Résidence Kasaï',
-      time: '16:00',
-      priority: 'Normale',
-      status: 'À faire',
-    ),
-  ];
+  /// Synthese des finances, fournie par `GET /finances/summary`.
+  FinanceSummary finances = const FinanceSummary(
+    received: 0,
+    spent: 0,
+    balance: 0,
+  );
 
-  final List<Payment> payments = const [
-    Payment(
-      project: 'Résidence Kasaï',
-      amount: 18500,
-      date: '12 sept.',
-      method: 'Virement',
-    ),
-    Payment(
-      project: 'Atelier Kalenda',
-      amount: 7200,
-      date: '09 sept.',
-      method: 'Espèces',
-    ),
-    Payment(
-      project: 'Bureaux Lumumba',
-      amount: 12000,
-      date: '02 sept.',
-      method: 'Virement',
-    ),
-  ];
+  bool get isReady => status == SyncStatus.ready;
 
-  double get totalReceived =>
-      payments.fold(0, (sum, payment) => sum + payment.amount);
-  double get totalExpenses => 12450;
+  /// Vrai quand une session est ouverte sur le backend.
+  bool get isOnline => _api.hasTarget && _api.isAuthenticated;
+
+  /// Vrai quand une URL d'API a ete fournie a la compilation.
+  bool get isApiConfigured => ApiClient.isConfigured;
+
+  double get totalReceived => finances.received;
+  double get totalExpenses => finances.spent;
   int get activeProjects => projects
       .where((project) => project.status == ProjectStatus.active)
       .length;
 
-  void _load() {
-    final raw = _preferences.getString('projects');
-    if (raw == null) {
-      projects.addAll(_seedProjects());
-      _persist();
+  static const _accessKey = 'kalenda.accessToken';
+  static const _refreshKey = 'kalenda.refreshToken';
+
+  /// Les identifiants provisoires commencent par "p" ; ceux du serveur sont des
+  /// UUID. Les ecritures locales ne partent jamais sur l'API.
+  static bool _isServerId(String id) => !id.startsWith('p');
+
+  // ---------------------------------------------------------------- Session
+
+  void _persistTokens(String? access, String? refresh) {
+    if (access == null || refresh == null) {
+      _preferences.remove(_accessKey);
+      _preferences.remove(_refreshKey);
     } else {
-      projects.addAll(
-        (jsonDecode(raw) as List).map(
-          (item) => Project.fromJson(item as Map<String, dynamic>),
-        ),
+      _preferences.setString(_accessKey, access);
+      _preferences.setString(_refreshKey, refresh);
+    }
+  }
+
+  /// Reprend la session precedente, si des tokens ont ete memorises.
+  Future<void> _restoreSession() async {
+    if (!_api.hasTarget) {
+      status = SyncStatus.unconfigured;
+      notifyListeners();
+      return;
+    }
+    final access = _preferences.getString(_accessKey);
+    final refresh = _preferences.getString(_refreshKey);
+    if (access == null || refresh == null) {
+      status = SyncStatus.unauthenticated;
+      notifyListeners();
+      return;
+    }
+    _api.restoreTokens(access: access, refresh: refresh);
+    await refreshFromApi();
+  }
+
+  void _requireApi() {
+    if (!_api.hasTarget) {
+      throw ApiException(
+        0,
+        "Aucune API configuree. Lancez l'application avec "
+        '--dart-define=KALENDA_API_URL=<url>.',
       );
     }
-    for (var index = 0; index < projects.length; index++) {
-      final project = projects[index];
-      // Covers live inside the bundle: any legacy remote URL (or an empty
-      // value) is remapped so the card always renders a real photo offline.
-      if (project.imageUrl.isEmpty || project.imageUrl.startsWith('http')) {
-        project.imageUrl = coverForSeed(project.id);
-      }
-    }
-    _persist();
-    final rawMessages = _preferences.getString('messages');
-    messages.addAll(
-      rawMessages == null
-          ? _seedMessages()
-          : (jsonDecode(rawMessages) as List).map(
-              (item) => ChatMessage.fromJson(item as Map<String, dynamic>),
-            ),
+  }
+
+  Future<void> login(String email, String password) async {
+    errorMessage = null;
+    _requireApi();
+    await _api.login(email.trim(), password);
+    await _adoptSession();
+  }
+
+  /// Ouvre une session a partir d'un jeton d'identite Google.
+  Future<void> loginWithGoogle(String credential) async {
+    errorMessage = null;
+    _requireApi();
+    await _api.loginWithGoogle(credential);
+    await _adoptSession();
+  }
+
+  Future<void> register({
+    required String email,
+    required String password,
+    required String fullName,
+    required String module,
+    required String jobTitle,
+    String companyName = '',
+    String phone = '',
+    String certifications = '',
+  }) async {
+    errorMessage = null;
+    _requireApi();
+    await _api.register(
+      email: email,
+      password: password,
+      fullName: fullName,
+      module: module,
+      jobTitle: jobTitle,
+      companyName: companyName,
+      phone: phone,
+      certifications: certifications,
     );
-    isReady = true;
+    await _adoptSession();
+  }
+
+  /// Catalogue des modules d'activite, lu depuis l'API.
+  ///
+  /// Aucune session requise : l'ecran de connexion s'en sert pour proposer le
+  /// choix du module et la specialite associee.
+  Future<List<KalendaModule>> modules() async {
+    if (ApiClient.apiUrl.isEmpty) return const [];
+    return _api.modules();
+  }
+
+  Future<void> _adoptSession() async {
+    final profile = await _api.me();
+    userEmail = profile['email'] as String?;
+    await refreshFromApi();
+  }
+
+  void logout() {
+    _api.clearTokens();
+    userEmail = null;
+    errorMessage = null;
+    _clearData();
+    status = SyncStatus.unauthenticated;
     notifyListeners();
   }
 
-  List<Project> _seedProjects() {
-    final now = DateTime.now();
-    return [
-      Project(
-        id: 'p1',
-        name: 'Résidence Kasaï',
-        reference: 'AK-2026-001',
-        client: 'M. Kabeya',
-        location: 'Limete, Kinshasa',
-        progress: 68,
-        status: ProjectStatus.active,
-        contractAmount: 85000,
-        plannedEnd: now.add(const Duration(days: 48)),
-        imageUrl: 'assets/images/covers/cover-01.jpg',
-      ),
-      Project(
-        id: 'p2',
-        name: 'Atelier Kalenda',
-        reference: 'AK-2026-002',
-        client: 'Kalenda Industries',
-        location: 'Gombe, Kinshasa',
-        progress: 42,
-        status: ProjectStatus.active,
-        contractAmount: 42000,
-        plannedEnd: now.add(const Duration(days: 25)),
-        imageUrl: 'assets/images/covers/cover-02.jpg',
-      ),
-      Project(
-        id: 'p3',
-        name: 'Bureaux Lumumba',
-        reference: 'AK-2025-014',
-        client: 'Lumumba Conseil',
-        location: 'Ngaliema, Kinshasa',
-        progress: 100,
-        status: ProjectStatus.completed,
-        contractAmount: 64000,
-        plannedEnd: now.subtract(const Duration(days: 12)),
-        imageUrl: 'assets/images/covers/cover-03.jpg',
-      ),
-      Project(
-        id: 'p4',
-        name: 'Extension école Matonge',
-        reference: 'AK-2026-003',
-        client: 'Fondation Matonge',
-        location: 'Matonge, Kinshasa',
-        progress: 12,
-        status: ProjectStatus.planned,
-        contractAmount: 28000,
-        plannedEnd: now.add(const Duration(days: 92)),
-        imageUrl: 'assets/images/covers/cover-04.jpg',
-      ),
-    ];
+  void _clearData() {
+    projects.clear();
+    messages.clear();
+    activities.clear();
+    payments.clear();
+    conversations.clear();
+    people.clear();
+    reports.clear();
+    finances = const FinanceSummary(received: 0, spent: 0, balance: 0);
+  }
+
+  // ---------------------------------------------------------------- Chargement
+
+  /// Recharge l'integralite des donnees depuis le backend.
+  Future<void> refreshFromApi() async {
+    if (!isOnline) {
+      status = ApiClient.isConfigured
+          ? SyncStatus.unauthenticated
+          : SyncStatus.unconfigured;
+      notifyListeners();
+      return;
+    }
+
+    status = SyncStatus.loading;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      final results = await Future.wait<dynamic>([
+        _api.getList('/api/v1/projects'),
+        _api.getList('/api/v1/activities'),
+        _api.getList('/api/v1/finances/payments'),
+        _api.getList('/api/v1/conversations'),
+        _api.getList('/api/v1/people'),
+        _api.getList('/api/v1/reports'),
+        _api.getObject('/api/v1/finances/summary'),
+      ]);
+
+      final rawProjects = (results[0] as List).cast<Map<String, dynamic>>();
+      final names = <String, String>{
+        for (final item in rawProjects)
+          '${item['id']}': '${item['name'] ?? ''}',
+      };
+
+      projects
+        ..clear()
+        ..addAll(
+          rawProjects.map(
+            (item) =>
+                Project.fromApi(item, imageUrl: coverForSeed('${item['id']}')),
+          ),
+        );
+
+      activities
+        ..clear()
+        ..addAll(
+          (results[1] as List).map(
+            (item) => Activity.fromApi(item as Map<String, dynamic>),
+          ),
+        );
+
+      payments
+        ..clear()
+        ..addAll(
+          (results[2] as List).map((item) {
+            final map = item as Map<String, dynamic>;
+            return Payment.fromApi(
+              map,
+              projectName: names['${map['projectId']}'] ?? 'Général',
+            );
+          }),
+        );
+
+      conversations
+        ..clear()
+        ..addAll(
+          (results[3] as List).map(
+            (item) => Conversation.fromApi(item as Map<String, dynamic>),
+          ),
+        );
+
+      people
+        ..clear()
+        ..addAll(
+          (results[4] as List).map(
+            (item) => Person.fromApi(item as Map<String, dynamic>),
+          ),
+        );
+
+      reports
+        ..clear()
+        ..addAll(
+          (results[5] as List).map((item) {
+            final map = item as Map<String, dynamic>;
+            return Report.fromApi(
+              map,
+              projectName: names['${map['projectId']}'] ?? 'Général',
+            );
+          }),
+        );
+
+      finances = FinanceSummary.fromApi(results[6] as Map<String, dynamic>);
+      _seedLastMessages(results[3] as List);
+      status = SyncStatus.ready;
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        _api.clearTokens();
+        userEmail = null;
+        _clearData();
+        status = SyncStatus.unauthenticated;
+        errorMessage = 'Session expirée, reconnectez-vous.';
+      } else {
+        status = SyncStatus.error;
+        errorMessage = error.message;
+      }
+    } catch (error) {
+      status = SyncStatus.error;
+      errorMessage = '$error';
+    }
+    notifyListeners();
+  }
+
+  /// Les fils complets sont charges a l'ouverture : on conserve le dernier
+  /// message de chaque discussion pour alimenter la liste.
+  void _seedLastMessages(List talks) {
+    messages
+      ..clear()
+      ..addAll(
+        talks.where((item) => item['lastMessage'] != null).map((item) {
+          final map = item as Map<String, dynamic>;
+          final last = map['lastMessage'] as Map<String, dynamic>;
+          return ChatMessage.fromApi(
+            {
+              'id': last['id'],
+              'conversationId': map['id'],
+              'projectId': map['projectId'],
+              'body': last['body'],
+              'sentAt': last['sentAt'],
+              'mine': last['mine'],
+              'attachments': const <dynamic>[],
+            },
+            projectName:
+                (map['project'] as Map?)?['name'] as String? ??
+                'Tous les projets',
+          );
+        }),
+      );
+  }
+
+  /// Charge le fil complet d'une discussion.
+  Future<void> openConversation(String conversationId) async {
+    if (!isOnline) return;
+    final talk = conversations.where((c) => c.id == conversationId).firstOrNull;
+    final projectName = talk?.projectName ?? 'Tous les projets';
+
+    try {
+      final raw = await _api.getList(
+        '/api/v1/conversations/$conversationId/messages',
+      );
+      final loaded = raw
+          .map(
+            (item) => ChatMessage.fromApi(
+              item as Map<String, dynamic>,
+              projectName: projectName,
+            ),
+          )
+          .toList();
+
+      messages
+        ..removeWhere((m) => m.conversationId == conversationId)
+        ..addAll(loaded);
+      notifyListeners();
+    } catch (error) {
+      errorMessage = '$error';
+      notifyListeners();
+    }
+  }
+
+  // ---------------------------------------------------------------- Ecritures
+
+  /// Execute une ecriture distante sans faire echouer l'appel local : l'ecran
+  /// reste fluide et l'erreur est exposee via [errorMessage].
+  Future<void> _push(Future<dynamic> Function() action) async {
+    try {
+      await action();
+      await refreshFromApi();
+    } catch (error) {
+      errorMessage = '$error';
+      notifyListeners();
+    }
   }
 
   void addProject({
     required String name,
-    required String client,
-    String location = 'À préciser',
+    String client = '',
+    String location = '',
     double contractAmount = 0,
     double progress = 0,
     ProjectStatus status = ProjectStatus.planned,
     DateTime? plannedEnd,
     String? imageUrl,
   }) {
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
-    projects.insert(
-      0,
-      Project(
-        id: id,
-        name: name,
-        reference: 'AK-${DateTime.now().year}-${(projects.length + 4).toString().padLeft(3, '0')}',
-        client: client,
-        location: location.isEmpty ? 'À préciser' : location,
-        progress: progress.clamp(0, 100),
-        status: status,
-        contractAmount: contractAmount,
-        plannedEnd: plannedEnd ?? DateTime.now().add(const Duration(days: 90)),
-        imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : coverForSeed(id),
-      ),
+    final id = 'p_${DateTime.now().microsecondsSinceEpoch}';
+    final draft = Project(
+      id: id,
+      name: name,
+      reference: '—',
+      client: client.isEmpty ? 'Client non renseigné' : client,
+      location: location.isEmpty ? 'Kinshasa' : location,
+      progress: progress.clamp(0, 100),
+      status: status,
+      contractAmount: contractAmount,
+      plannedEnd: plannedEnd ?? DateTime.now().add(const Duration(days: 90)),
+      imageUrl: (imageUrl != null && imageUrl.isNotEmpty)
+          ? imageUrl
+          : coverForSeed(id),
     );
-    _persist();
+    projects.insert(0, draft);
     notifyListeners();
+
+    if (isOnline) {
+      unawaited(
+        _push(
+          () => _api.post('/api/v1/projects', {
+            'name': name,
+            'clientName': draft.client,
+            'location': draft.location,
+            'contractAmount': contractAmount,
+            'status': status.name,
+            'progress': draft.progress,
+            'plannedEndDate': draft.plannedEnd.toIso8601String(),
+          }),
+        ),
+      );
+    }
   }
 
   void updateProject(Project project) {
     final index = projects.indexWhere((p) => p.id == project.id);
     if (index != -1) {
       projects[index] = project;
-      _persist();
       notifyListeners();
+    }
+    if (isOnline && _isServerId(project.id)) {
+      unawaited(
+        _push(
+          () => _api.patch('/api/v1/projects/${project.id}', {
+            'name': project.name,
+            'clientName': project.client,
+            'location': project.location,
+            'contractAmount': project.contractAmount,
+            'status': project.status.name,
+            'progress': project.progress,
+            'plannedEndDate': project.plannedEnd.toIso8601String(),
+          }),
+        ),
+      );
     }
   }
 
   void deleteProject(Project project) {
     projects.removeWhere((item) => item.id == project.id);
-    _persist();
     notifyListeners();
+    if (isOnline && _isServerId(project.id)) {
+      unawaited(_push(() => _api.delete('/api/v1/projects/${project.id}')));
+    }
   }
 
-  List<ChatMessage> _seedMessages() {
+  /// Ajoute une activite a l'agenda.
+  void addActivity({
+    required String title,
+    String project = 'Général',
+    String priority = 'Normale',
+  }) {
     final now = DateTime.now();
-    return [
-      ChatMessage(
-        id: 'm1',
-        conversationId: 'team-kasai',
-        body:
-            'Le ferraillage des fondations est terminé sur la zone B. Je vous envoie les photos du contrôle.',
-        projectName: 'Résidence Kasaï',
-        sentAt: now.subtract(const Duration(minutes: 18)),
-        isMine: false,
-        attachmentNames: const ['controle-zone-b.jpg', 'ferraillage-b.jpg'],
+    activities.insert(
+      0,
+      Activity(
+        title: title,
+        project: project,
+        time:
+            '${now.hour.toString().padLeft(2, '0')}:'
+            '${now.minute.toString().padLeft(2, '0')}',
+        priority: priority,
+        status: 'À faire',
       ),
-      ChatMessage(
-        id: 'm2',
-        conversationId: 'team-kasai',
-        body: 'Bien reçu. On garde le coulage à 16 h si la météo reste stable.',
-        projectName: 'Résidence Kasaï',
-        sentAt: now.subtract(const Duration(minutes: 11)),
-        isMine: true,
+    );
+    notifyListeners();
+
+    final target = projects.where((p) => p.name == project).firstOrNull;
+    if (isOnline && target != null && _isServerId(target.id)) {
+      const priorityApi = {
+        'Urgente': 'urgent',
+        'Haute': 'high',
+        'Basse': 'low',
+        'Normale': 'normal',
+      };
+      unawaited(
+        _push(
+          () => _api.post('/api/v1/activities', {
+            'title': title,
+            'projectId': target.id,
+            'status': 'todo',
+            'priority': priorityApi[priority] ?? 'normal',
+          }),
+        ),
+      );
+    }
+  }
+
+  /// Ajoute une personne au repertoire.
+  void addPerson({
+    required String name,
+    required String role,
+    String phone = '',
+    String project = 'Non affecté',
+  }) {
+    people.insert(
+      0,
+      Person(
+        id: 'p_${DateTime.now().microsecondsSinceEpoch}',
+        name: name,
+        role: role,
+        phone: phone,
+        project: project,
       ),
-      ChatMessage(
-        id: 'm3',
-        conversationId: 'direction',
-        body:
-            'Le brief quotidien est prêt : trois activités terminées, une livraison reçue et aucun blocage critique.',
-        projectName: 'Tous les projets',
-        sentAt: now.subtract(const Duration(hours: 2)),
-        isMine: false,
+    );
+    notifyListeners();
+
+    if (isOnline) {
+      unawaited(
+        _push(
+          () => _api.post('/api/v1/people', {
+            'fullName': name,
+            'jobTitle': role,
+            'phone': phone,
+          }),
+        ),
+      );
+    }
+  }
+
+  /// Publie un rapport journalier pour un chantier.
+  void addReport({
+    required String title,
+    required String summary,
+    required String project,
+  }) {
+    reports.insert(
+      0,
+      Report(
+        id: 'p_${DateTime.now().microsecondsSinceEpoch}',
+        title: title,
+        summary: summary,
+        project: project,
+        date: DateTime.now(),
       ),
-    ];
+    );
+    notifyListeners();
+
+    final target = projects.where((p) => p.name == project).firstOrNull;
+    if (isOnline && target != null && _isServerId(target.id)) {
+      unawaited(
+        _push(
+          () => _api.post('/api/v1/reports', {
+            'projectId': target.id,
+            'title': title,
+            'body': summary,
+            'reportDate': DateTime.now().toIso8601String().substring(0, 10),
+          }),
+        ),
+      );
+    }
   }
 
   List<ChatMessage> messagesFor(String conversationId) =>
@@ -272,9 +555,10 @@ class LocalStore extends ChangeNotifier {
     required String projectName,
     List<String> attachmentNames = const [],
   }) {
+    final localId = 'p_${DateTime.now().microsecondsSinceEpoch}';
     messages.add(
       ChatMessage(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        id: localId,
         conversationId: conversationId,
         body: body,
         projectName: projectName,
@@ -283,15 +567,25 @@ class LocalStore extends ChangeNotifier {
         attachmentNames: attachmentNames,
       ),
     );
-    _preferences.setString(
-      'messages',
-      jsonEncode(messages.map((message) => message.toJson()).toList()),
-    );
     notifyListeners();
-  }
 
-  void _persist() => _preferences.setString(
-    'projects',
-    jsonEncode(projects.map((project) => project.toJson()).toList()),
-  );
+    if (isOnline) {
+      unawaited(
+        _push(() async {
+          final sent = await _api.post(
+            '/api/v1/conversations/$conversationId/messages',
+            {'body': body},
+          );
+          final index = messages.indexWhere((m) => m.id == localId);
+          if (index != -1) {
+            messages[index] = ChatMessage.fromApi(
+              sent,
+              projectName: projectName,
+            );
+            notifyListeners();
+          }
+        }),
+      );
+    }
+  }
 }

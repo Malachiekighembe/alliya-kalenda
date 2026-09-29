@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { deadlineHint, money } from "@/lib/format";
-import { projectStatusLabels, ProjectStatus } from "@/lib/demo-data";
+import { projectStatusLabels, ProjectStatus } from "@/lib/types";
 import { Reveal } from "@/components/reveal";
 import { Progress } from "@/components/progress";
 import { useKalenda } from "@/context/kalenda-context";

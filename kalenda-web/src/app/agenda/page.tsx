@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Reveal } from "@/components/reveal";
 import { useKalenda } from "@/context/kalenda-context";
-import { type Activity } from "@/lib/demo-data";
+import { type Activity } from "@/lib/types";
 import { deadlineHint, formatDate } from "@/lib/format";
 
 const weekDay = (date: Date) =>

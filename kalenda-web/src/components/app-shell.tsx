@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useKalenda } from "@/context/kalenda-context";
 
 /// Icônes SVG inline (style Material, calquées sur les destinations du
 /// NavigationRail / NavigationBar Flutter).
@@ -50,6 +51,130 @@ const secondaryNav = [
 
 const mobilePrimaryNav = primaryNav.slice(0, 4);
 
+/**
+ * pastille de session : affiche l'etat de la connexion a l'API et permet de
+ * s'authentifier / se deconnecter. Sans session, aucune donnee n'est chargee.
+ * Le bouton mene a la page de connexion.
+ */
+/**
+ * Bandeau de synchronisation global : rappelle en permanence si l'écran
+ * affiche des données du serveur ou du cache local, et donne accès à une
+ * synchronisation manuelle. Absent tant qu'aucune session n'est ouverte.
+ */
+function SyncBanner() {
+  const { isOnline, status, error, refresh } = useKalenda();
+  if (!isOnline) return null;
+
+  const tone: Record<string, { bg: string; fg: string; label: string }> = {
+    loading: {
+      bg: "bg-amber/10",
+      fg: "text-amber-700",
+      label: "Synchronisation…",
+    },
+    ready: {
+      bg: "bg-green-50",
+      fg: "text-green-700",
+      label: "Données synchronisées",
+    },
+    error: {
+      bg: "bg-red-50",
+      fg: "text-red-700",
+      label: "Erreur de synchronisation",
+    },
+    unauthenticated: {
+      bg: "bg-surface-low",
+      fg: "text-navy/60",
+      label: "Session fermée",
+    },
+  };
+  const { bg, fg, label } = tone[status] ?? tone.unauthenticated;
+
+  return (
+    <div
+      role="status"
+      className={`flex items-center gap-2 border-b border-card-border px-4 py-1.5 text-[11px] font-semibold md:px-6 ${bg} ${fg}`}
+    >
+      <span className="truncate">
+        {label}
+        {error && status === "error" ? ` · ${error}` : ""}
+      </span>
+      <button
+        type="button"
+        onClick={() => void refresh()}
+        disabled={status === "loading"}
+        className="ml-auto shrink-0 rounded px-2 py-0.5 font-bold underline-offset-2 hover:underline disabled:opacity-50"
+      >
+        Actualiser
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Garde d'authentification : sans session valide, aucune page de l'application
+ * n'est rendue et l'utilisateur est renvoye vers /connexion. L'API etant la
+ * seule source de donnees, il n'y a rien a afficher hors session.
+ */
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { status } = useKalenda();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const isLoginPage = pathname === "/connexion";
+
+  useEffect(() => {
+    if (status === "unauthenticated" && !isLoginPage) {
+      router.replace("/connexion");
+    }
+  }, [status, isLoginPage, router]);
+
+  if (status === "unauthenticated" && !isLoginPage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm font-semibold text-navy/60">
+        Redirection vers la connexion…
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
+function SessionChip() {
+  const { user, isOnline, status, error, logout } = useKalenda();
+
+  if (user && isOnline) {
+    return (
+      <div className="rounded-xl border border-card-border bg-surface-low p-3">
+        <p className="truncate text-xs font-bold text-navy">{user.email}</p>
+        <p className="mt-0.5 text-[11px] font-medium text-navy/50">
+          {status === "loading" ? "Synchronisation…" : "Connecté à l'API"}
+        </p>
+        {error ? (
+          <p className="mt-1 text-[11px] font-semibold text-red-600">{error}</p>
+        ) : null}
+        <button
+          type="button"
+          onClick={logout}
+          className="mt-2 w-full rounded-lg border border-card-border bg-white px-2 py-1.5 text-xs font-bold text-navy/70 transition-colors hover:border-accent hover:text-accent"
+        >
+          Se déconnecter
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href="/connexion"
+      className="block rounded-xl border border-card-border bg-surface-low p-3 transition-colors hover:border-accent"
+    >
+      <p className="text-xs font-bold text-navy">Se connecter</p>
+      <p className="mt-0.5 text-[11px] font-medium text-navy/50">
+      {error ?? "Aucune session"}
+      </p>
+    </Link>
+  );
+}
+
 /// Barre latérale fixe (desktop) + barre de navigation basse (mobile),
 /// miroir du NavigationRail / NavigationBar Flutter.
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -57,6 +182,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  // La connexion se tient hors de l'application : ni rail, ni barre basse,
+  // ni bandeau de synchronisation. L'ecran occupe tout l'ecran.
+  if (pathname === "/connexion") return <>{children}</>;
 
   const navLink = (item: { href: string; label: string; icon: string }) => {
     const active = isActive(item.href);
@@ -81,6 +210,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
+    <AuthGuard>
     <div className="flex min-h-screen">
       {/* Rail desktop */}
       <aside className="sticky top-0 hidden h-screen w-16 flex-col border-r border-card-border bg-white md:flex md:w-56 lg:w-60">
@@ -102,8 +232,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="my-3 border-t border-card-border" />
           {secondaryNav.map(navLink)}
         </nav>
-        <div className="px-4 py-4 text-xs font-medium text-navy/50">
-          Mobile &amp; desktop
+        <div className="px-4 py-4">
+          <SessionChip />
         </div>
       </aside>
 
@@ -127,6 +257,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main className="flex-1 px-4 pb-28 pt-4 md:px-6 md:pb-8 md:pt-6">
+          <SyncBanner />
           {children}
         </main>
 
@@ -184,5 +315,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : null}
       </div>
     </div>
+    </AuthGuard>
   );
 }

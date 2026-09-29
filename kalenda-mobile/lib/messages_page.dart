@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -34,7 +35,6 @@ class _MessagesPageState extends State<MessagesPage> {
   final _scrollController = ScrollController();
   final _attachments = <_PickedAttachment>[];
   String? _selectedConversationId;
-  String _projectFilter = 'Tous les projets';
   String _conversationQuery = '';
 
   Conversation get _selectedConversation =>
@@ -56,127 +56,135 @@ class _MessagesPageState extends State<MessagesPage> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 760;
-      final content = _chatView(context);
+      final content = wide ? _chatView(context) : null;
       return AnimatedBuilder(
         animation: widget.store,
         builder: (context, child) => Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          padding: wide
+              ? const EdgeInsets.fromLTRB(12, 0, 12, 12)
+              : EdgeInsets.zero,
           child: wide
               ? Row(
                   children: [
                     SizedBox(width: 260, child: _conversationList()),
                     const SizedBox(width: 12),
-                    Expanded(child: content),
+                    Expanded(child: content!),
                   ],
                 )
-              : Column(
-                  children: [
-                    _mobileMessageHeader(),
-                    const SizedBox(height: 10),
-                    Expanded(child: content),
-                  ],
-                ),
+              : _conversationList(),
         ),
       );
     },
   );
 
-  Widget _conversationList() => Card(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 14, 0),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Conversations',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                ),
-              ),
-              if (_unreadTotal > 0)
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: kAccent.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(99),
+  Widget _conversationList() {
+    final mobile = MediaQuery.sizeOf(context).width < 760;
+    return Card(
+      margin: mobile ? EdgeInsets.zero : null,
+      elevation: mobile ? 0 : null,
+      shape: mobile
+          ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero)
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 14, 0),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Conversations',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
+                ),
+                if (_unreadTotal > 0)
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: kAccent.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(99),
                     ),
-                    child: Text(
-                      '$_unreadTotal non lus',
-                      style: const TextStyle(
-                        color: kAccent,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        height: 1.2,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      child: Text(
+                        '$_unreadTotal non lus',
+                        style: const TextStyle(
+                          color: kAccent,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 3, 16, 10),
-          child: Text(
-            'Briefs et échanges chantier',
-            style: TextStyle(color: Colors.black54, fontSize: 12, height: 1.3),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (value) => setState(() => _conversationQuery = value),
-            decoration: const InputDecoration(
-              hintText: 'Rechercher une conversation...',
-              prefixIcon: Icon(Icons.search_rounded, size: 18),
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 3, 16, 10),
+            child: Text(
+              'Briefs et échanges chantier',
+              style: TextStyle(
+                color: Colors.black54,
+                fontSize: 12,
+                height: 1.3,
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 9),
-        Expanded(
-          child: _groupedConversations.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text(
-                      'Aucune conversation pour ce projet.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.black54, fontSize: 12),
-                    ),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  children: [
-                    for (
-                      var groupIndex = 0;
-                      groupIndex < _groupedConversations.length;
-                      groupIndex++
-                    )
-                      _buildGroup(
-                        _groupedConversations[groupIndex],
-                        groupIndex * 90,
-                      ),
-                  ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _conversationQuery = value),
+              decoration: const InputDecoration(
+                hintText: 'Rechercher une conversation...',
+                prefixIcon: Icon(Icons.search_rounded, size: 18),
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
                 ),
-        ),
-      ],
-    ),
-  );
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Expanded(
+            child: _groupedConversations.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text(
+                        'Aucune conversation pour ce projet.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.black54, fontSize: 12),
+                      ),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    children: [
+                      for (
+                        var groupIndex = 0;
+                        groupIndex < _groupedConversations.length;
+                        groupIndex++
+                      )
+                        _buildGroup(
+                          _groupedConversations[groupIndex],
+                          groupIndex * 90,
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 
   int get _unreadTotal => widget.store.conversations.fold(
     0,
@@ -302,8 +310,19 @@ class _MessagesPageState extends State<MessagesPage> {
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () =>
-              setState(() => _selectedConversationId = conversation.id),
+          onTap: () {
+            // En mode API, le fil complet n'est pas charge d'avance.
+            unawaited(widget.store.openConversation(conversation.id));
+            if (MediaQuery.sizeOf(context).width < 760) {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => _mobileConversationPage(conversation),
+                ),
+              );
+            } else {
+              setState(() => _selectedConversationId = conversation.id);
+            }
+          },
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
             child: Row(
@@ -439,108 +458,139 @@ class _MessagesPageState extends State<MessagesPage> {
     ];
   }
 
-  List<Conversation> get _visibleConversations => widget.store.conversations
-      .where(
-        (conversation) =>
-            (_projectFilter == 'Tous les projets' ||
-                conversation.projectName == _projectFilter) &&
-            (_conversationQuery.isEmpty ||
-                conversation.title.toLowerCase().contains(
-                  _conversationQuery.toLowerCase(),
-                )),
-      )
-      .toList();
-
-  List<String> get _projectFilters => [
-    'Tous les projets',
-    ...widget.store.conversations
-        .map((conversation) => conversation.projectName)
-        .where((name) => name != 'Tous les projets')
-        .toSet(),
-  ];
-
-  Widget _mobileMessageHeader() {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        children: [
-          PopupMenuButton<String>(
-            tooltip: 'Choisir un projet',
-            onSelected: _setProjectFilter,
-            itemBuilder: (context) => [
-              for (final project in _projectFilters)
-                PopupMenuItem(value: project, child: Text(project)),
+  Widget _mobileConversationPage(Conversation conversation) {
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, child) {
+        final messages = widget.store.messagesFor(conversation.id);
+        final scheme = Theme.of(context).colorScheme;
+        return Scaffold(
+          backgroundColor: kSurfaceLow,
+          resizeToAvoidBottomInset: true,
+          body: Column(
+            children: [
+              _mobileConversationHeader(conversation),
+              Expanded(
+                child: messages.isEmpty
+                    ? _emptyState(conversation)
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) =>
+                            _messageBubble(messages[index], conversation),
+                      ),
+              ),
+              _composerArea(conversation, mobile: true),
+              // Keep the surface behind the keyboard/nav bar neutral.
+              Container(height: 6, color: scheme.surface),
             ],
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer,
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(Icons.apartment_rounded, color: scheme.primary),
-            ),
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedConversation.id,
-              isDense: true,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Équipe',
-                prefixIcon: Icon(Icons.forum_outlined),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 9,
-                ),
-              ),
-              items: [
-                for (final conversation in _visibleConversations)
-                  DropdownMenuItem(
-                    value: conversation.id,
-                    child: Text(
-                      conversation.title,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: (value) =>
-                  setState(() => _selectedConversationId = value),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Tooltip(
-            message: _projectFilter,
-            child: Icon(
-              Icons.filter_alt_rounded,
-              size: 20,
-              color: scheme.secondary,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  void _setProjectFilter(String value) {
-    final conversations = widget.store.conversations
-        .where(
-          (conversation) =>
-              value == 'Tous les projets' || conversation.projectName == value,
-        )
-        .toList();
-    setState(() {
-      _projectFilter = value;
-      if (conversations.isNotEmpty &&
-          !conversations.any(
-            (conversation) => conversation.id == _selectedConversation.id,
-          )) {
-        _selectedConversationId = conversations.first.id;
-      }
-    });
-  }
+  /// Mobile header mirroring the DARAJA HEALTH conversation bar: a solid
+  /// navy strip, a 44px back button, the contact block and tappable actions.
+  Widget _mobileConversationHeader(Conversation conversation) => Container(
+    color: kNavy,
+    child: SafeArea(
+      bottom: false,
+      child: SizedBox(
+        height: 62,
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'Retour aux conversations',
+              onPressed: () => Navigator.of(context).pop(),
+              iconSize: 22,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            ),
+            const SizedBox(width: 4),
+            CircleAvatar(
+              radius: 19,
+              backgroundColor: Colors.white,
+              foregroundColor: kNavy,
+              child: Text(
+                conversation.initials,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    conversation.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    conversation.projectName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xffc8d8f0),
+                      fontSize: 11,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _mobileHeaderAction(
+              icon: Icons.summarize_outlined,
+              tooltip: 'Créer un brief',
+              onPressed: () => _insertBrief(conversation),
+            ),
+            _mobileHeaderAction(
+              icon: Icons.close_rounded,
+              tooltip: 'Fermer la discussion',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  /// 44x44 header action with a translucent white chip so it stays readable
+  /// on the navy bar.
+  Widget _mobileHeaderAction({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) => Padding(
+    padding: const EdgeInsets.only(right: 4),
+    child: IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      iconSize: 19,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.white.withValues(alpha: .14),
+        foregroundColor: Colors.white,
+        shape: const CircleBorder(),
+      ),
+      icon: Icon(icon),
+    ),
+  );
 
   Widget _chatView(BuildContext context) {
     final conversation = _selectedConversation;
@@ -746,49 +796,132 @@ class _MessagesPageState extends State<MessagesPage> {
     );
   }
 
-  Widget _composerArea(Conversation conversation) => Container(
-    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(18)),
-    ),
-    child: Column(
-      children: [
-        if (_attachments.isNotEmpty) _attachmentPreview(),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+  /// Composer. On mobile it matches the DARAJA HEALTH bar: a pill input with
+  /// an inline attach button and a round send action. The desktop layout keeps
+  /// the existing tonal + filled button pair.
+  Widget _composerArea(Conversation conversation, {bool mobile = false}) {
+    final surface = Theme.of(context).colorScheme.surface;
+    if (mobile) {
+      return Container(
+        decoration: BoxDecoration(
+          color: surface,
+          border: Border(top: BorderSide(color: kSurfaceHigh)),
+        ),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton.filledTonal(
-              tooltip: 'Ajouter des images',
-              onPressed: _pickImages,
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-            ),
-            Expanded(
-              child: TextField(
-                controller: _composer,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.newline,
-                decoration: const InputDecoration(
-                  hintText: 'Écrire un message ou un brief...',
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+            if (_attachments.isNotEmpty) _attachmentPreview(),
+            SafeArea(
+              top: false,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _composer,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.newline,
+                      decoration: InputDecoration(
+                        hintText: 'Écrire un message...',
+                        isDense: true,
+                        filled: true,
+                        fillColor: kSurfaceLow,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 11,
+                        ),
+                        prefixIcon: IconButton(
+                          tooltip: 'Ajouter des images',
+                          onPressed: _pickImages,
+                          iconSize: 20,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 38,
+                            height: 38,
+                          ),
+                          icon: const Icon(Icons.attach_file_rounded),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    tooltip: 'Envoyer',
+                    onPressed: () => _send(conversation),
+                    iconSize: 19,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 44,
+                      height: 44,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: kAccent,
+                      foregroundColor: Colors.white,
+                      shape: const CircleBorder(),
+                    ),
+                    icon: const Icon(Icons.send_rounded),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              tooltip: 'Envoyer',
-              onPressed: () => _send(conversation),
-              icon: const Icon(Icons.send_rounded),
             ),
           ],
         ),
-      ],
-    ),
-  );
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(18)),
+      ),
+      child: Column(
+        children: [
+          if (_attachments.isNotEmpty) _attachmentPreview(),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              IconButton.filledTonal(
+                tooltip: 'Ajouter des images',
+                onPressed: _pickImages,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _composer,
+                  minLines: 1,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.newline,
+                  decoration: const InputDecoration(
+                    hintText: 'Écrire un message ou un brief...',
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                tooltip: 'Envoyer',
+                onPressed: () => _send(conversation),
+                icon: const Icon(Icons.send_rounded),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _attachmentPreview() => Align(
     alignment: Alignment.centerLeft,

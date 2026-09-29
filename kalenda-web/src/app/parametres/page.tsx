@@ -1,40 +1,65 @@
-import { isSupabaseConfigured } from "@/lib/supabase";
+"use client";
 
-const settingsSections = [
-  {
-    title: "Profil",
-    description: "Nom, société, téléphone et préférences du compte.",
-    rows: [
-      { label: "Nom complet", value: "À compléter" },
-      { label: "Société", value: "À compléter" },
-      { label: "Téléphone", value: "À compléter" },
-    ],
-  },
-  {
-    title: "Devise & dates",
-    description: "Formats utilisés partout dans l’application.",
-    rows: [
-      { label: "Devise", value: "USD ($)" },
-      { label: "Format de date", value: "dd/MM/yyyy" },
-      { label: "Langue", value: "Français" },
-    ],
-  },
-  {
-    title: "Synchronisation",
-    description: "Connexion Supabase partagée avec les apps mobile et desktop.",
-    rows: [
-      {
-        label: "Base Supabase",
-        value: isSupabaseConfigured
-          ? "Connectée"
-          : "Données démo (clé absente)",
-      },
-      { label: "Dernière synchro", value: "—" },
-    ],
-  },
-];
+import Link from "next/link";
+import { API_URL, isApiConfigured } from "@/lib/api";
+import { useKalenda } from "@/context/kalenda-context";
+
+/** Valeur affichee : la donnee reelle si elle existe, sinon un tiret. */
+const show = (value: string | undefined, placeholder = "À compléter") =>
+  value && value.trim() ? value : placeholder;
+
+const statusLabels: Record<string, string> = {
+  unauthenticated: "Non connecté",
+  loading: "Synchronisation en cours…",
+  ready: "Connecté à l'API",
+  error: "Erreur de synchronisation",
+  unconfigured: "API non configurée",
+};
 
 export default function SettingsPage() {
+  const { user, profile, isOnline, status, error, logout, refresh } =
+    useKalenda();
+
+  const sections = [
+    {
+      title: "Profil",
+      description: "Informations du compte connecté à l'API.",
+      rows: [
+        { label: "Nom complet", value: show(profile?.profile?.fullName) },
+        { label: "Société", value: show(profile?.profile?.companyName) },
+        { label: "Téléphone", value: show(profile?.profile?.phone) },
+        { label: "E-mail", value: show(user?.email) },
+      ],
+    },
+    {
+      title: "Devise & dates",
+      description: "Formats utilisés dans l'application.",
+      rows: [
+        { label: "Devise", value: profile?.profile?.currency ?? "USD ($)" },
+        {
+          label: "Format de date",
+          value: profile?.profile?.dateFormat ?? "dd/MM/yyyy",
+        },
+        { label: "Langue", value: "Français" },
+      ],
+    },
+    {
+      title: "Synchronisation",
+      description: "Connexion au backend Alliya Kalenda.",
+      rows: [
+        {
+          label: "API",
+          value: isApiConfigured() ? API_URL : "Non configurée",
+        },
+        { label: "État", value: statusLabels[status] ?? status },
+        {
+          label: "Dernière synchro",
+          value: error ? error : status === "ready" ? "À l'instant" : "—",
+        },
+      ],
+    },
+  ];
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <header>
@@ -45,7 +70,7 @@ export default function SettingsPage() {
       </header>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {settingsSections.map((section) => (
+        {sections.map((section) => (
           <section
             key={section.title}
             className="rounded-xl border border-card-border bg-white p-4"
@@ -60,8 +85,10 @@ export default function SettingsPage() {
                   key={row.label}
                   className="flex items-center justify-between gap-3 py-2 text-sm"
                 >
-                  <dt className="text-navy/70">{row.label}</dt>
-                  <dd className="font-semibold text-navy">{row.value}</dd>
+                  <dt className="text-navy/60">{row.label}</dt>
+                  <dd className="truncate text-right font-semibold text-navy">
+                    {row.value}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -69,15 +96,39 @@ export default function SettingsPage() {
         ))}
       </div>
 
+
       <section className="rounded-xl border border-card-border bg-white p-4">
-        <h2 className="text-sm font-extrabold text-navy">Thème</h2>
-        <div className="mt-3 flex gap-3">
-          <span className="rounded-lg border-2 border-accent px-4 py-2 text-sm font-bold text-navy">
-            Clair
-          </span>
-          <span className="rounded-lg border border-card-border px-4 py-2 text-sm font-bold text-navy/50">
-            Sombre (bientôt)
-          </span>
+        <h2 className="text-sm font-extrabold text-navy">Session</h2>
+        <p className="mt-0.5 text-xs text-navy/55">
+          {isOnline
+            ? "Vos données sont enregistrées sur le serveur Alliya Kalenda."
+            : "Aucune session ouverte : connectez-vous pour charger vos données."}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={!isOnline || status === "loading"}
+            className="rounded-lg border border-card-border px-4 py-2 text-sm font-bold text-navy/70 transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            Synchroniser maintenant
+          </button>
+          {isOnline ? (
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg bg-navy px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-navy/90"
+            >
+              Se déconnecter
+            </button>
+          ) : (
+            <Link
+              href="/connexion"
+              className="rounded-lg bg-navy px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-navy/90"
+            >
+              Se connecter
+            </Link>
+          )}
         </div>
       </section>
     </div>

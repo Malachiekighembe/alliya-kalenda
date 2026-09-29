@@ -7,6 +7,23 @@ import { validateBody } from "../middleware/validate";
 export const financesRouter = Router();
 financesRouter.use(requireAuth);
 
+/** GET /api/v1/finances/summary — synthèse des encaissements et dépenses. */
+financesRouter.get("/summary", async (req, res, next) => {
+  try {
+    const projectId = typeof req.query.projectId === "string" && req.query.projectId ? req.query.projectId : undefined;
+    const where = { ownerId: req.user!.id, ...(projectId ? { projectId } : {}) };
+    const [payments, expenses] = await Promise.all([
+      prisma().payment.findMany({ where, select: { amount: true } }),
+      prisma().expense.findMany({ where, select: { amount: true } }),
+    ]);
+    const received = payments.reduce((sum, item) => sum + Number(item.amount), 0);
+    const spent = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
+    res.json({ received, spent, balance: received - spent, paymentsCount: payments.length, expensesCount: expenses.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
 const paymentSchema = z.object({
   projectId: z.uuid(),
   amount: z.coerce.number().positive(),

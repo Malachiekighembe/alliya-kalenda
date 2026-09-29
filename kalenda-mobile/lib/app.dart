@@ -9,10 +9,16 @@ import 'core/project_cover.dart';
 import 'data/local_store.dart';
 import 'domain/models.dart';
 import 'features_pages.dart';
+import 'login_page.dart';
 import 'messages_page.dart';
 
 class AlliyaKalendaApp extends StatefulWidget {
-  const AlliyaKalendaApp({super.key});
+  const AlliyaKalendaApp({super.key, this.storeFactory});
+
+  /// Fabrique du store, surchargeable par les tests pour injecter un client
+  /// HTTP simule. En production, le store cree son propre client.
+  final LocalStore Function(SharedPreferences)? storeFactory;
+
   @override
   State<AlliyaKalendaApp> createState() => _AlliyaKalendaAppState();
 }
@@ -208,9 +214,41 @@ class _AlliyaKalendaAppState extends State<AlliyaKalendaApp> {
         future: _preferences,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const _SplashScreen();
-          return AppShell(store: LocalStore(snapshot.data!));
+          return _Root(
+            store:
+                widget.storeFactory?.call(snapshot.data!) ??
+                LocalStore(snapshot.data!),
+          );
         },
       ),
+    );
+  }
+}
+
+/// Point d'entree : affiche l'ecran de connexion tant qu'aucune session n'est
+/// ouverte, puis le shell. L'API etant la seule source de donnees, aucune
+/// donnee de demonstration n'est jamais affichee.
+class _Root extends StatefulWidget {
+  const _Root({required this.store});
+  final LocalStore store;
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, child) {
+        // Le backend est la seule source de donnees : tant qu'aucune session
+        // n'est ouverte, l'ecran de connexion occupe tout l'ecran.
+        if (!widget.store.isOnline) {
+          return LoginPage(store: widget.store);
+        }
+        return AppShell(store: widget.store);
+      },
     );
   }
 }
@@ -312,6 +350,7 @@ class _AppShellState extends State<AppShell> {
                     label: labels[index],
                     actionLabel: _actionLabel,
                     onAdd: _toolbarAction(context),
+                    store: widget.store,
                   ),
                   Expanded(
                     child: AnimatedSwitcher(
@@ -342,35 +381,43 @@ class _AppShellState extends State<AppShell> {
         bottomNavigationBar: wide
             ? null
             : NavigationBar(
-                selectedIndex: index == 0
-                    ? 0
-                    : index == 2
-                    ? 1
-                    : index == 3
-                    ? 2
-                    : 3,
-                onDestinationSelected: (value) => value == 0
-                    ? _select(0)
-                    : value == 1
-                    ? _select(2)
-                    : value == 2
-                    ? _select(3)
-                    : _showMoreMenu(context),
+                selectedIndex: _mobileDestinationIndex,
+                onDestinationSelected: (value) {
+                  if (value == 4) {
+                    _showMoreMenu(context);
+                  } else {
+                    _select(value);
+                  }
+                },
+                height: 76,
+                elevation: 0,
+                backgroundColor: Colors.white,
+                indicatorColor: kAccent.withValues(alpha: .12),
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                 destinations: const [
                   NavigationDestination(
-                    icon: Icon(Icons.grid_view),
+                    icon: Icon(Icons.grid_view_rounded),
+                    selectedIcon: Icon(Icons.grid_view_rounded),
                     label: 'Accueil',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.apartment),
+                    icon: Icon(Icons.calendar_month_outlined),
+                    selectedIcon: Icon(Icons.calendar_month_rounded),
+                    label: 'Agenda',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.apartment_outlined),
+                    selectedIcon: Icon(Icons.apartment_rounded),
                     label: 'Projets',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.forum_outlined),
+                    selectedIcon: Icon(Icons.forum_rounded),
                     label: 'Messages',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.more_horiz),
+                    icon: Icon(Icons.more_horiz_rounded),
+                    selectedIcon: Icon(Icons.more_horiz_rounded),
                     label: 'Plus',
                   ),
                 ],
@@ -378,6 +425,11 @@ class _AppShellState extends State<AppShell> {
       ),
     );
   }
+
+  int get _mobileDestinationIndex => switch (index) {
+    0 || 1 || 2 || 3 => index,
+    _ => 4,
+  };
 
   void _select(int value) => setState(() => index = value);
 
@@ -412,7 +464,7 @@ class _AppShellState extends State<AppShell> {
           onAgenda: () => _select(1),
         );
       case 1:
-        return const AgendaPage();
+        return AgendaPage(store: widget.store);
       case 2:
         return ProjectsPage(
           store: widget.store,
@@ -421,13 +473,13 @@ class _AppShellState extends State<AppShell> {
       case 3:
         return MessagesPage(store: widget.store);
       case 4:
-        return const PeoplePage();
+        return PeoplePage(store: widget.store);
       case 5:
         return FinancePage(store: widget.store);
       case 6:
-        return const ReportsPage();
+        return ReportsPage(store: widget.store);
       default:
-        return const SettingsPage();
+        return SettingsPage(store: widget.store);
     }
   }
 
@@ -491,7 +543,10 @@ class _AppShellState extends State<AppShell> {
                   const SizedBox(height: 16),
                   const Text(
                     'Photo de couverture',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -499,19 +554,23 @@ class _AppShellState extends State<AppShell> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: kProjectCovers.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 8),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 8),
                       itemBuilder: (context, index) {
                         final cover = kProjectCovers[index];
                         final isSelected = cover == selectedCover;
                         return GestureDetector(
-                          onTap: () => setDialogState(() => selectedCover = cover),
+                          onTap: () =>
+                              setDialogState(() => selectedCover = cover),
                           child: Container(
                             width: 60,
                             height: 60,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: isSelected ? kAccent : Colors.transparent,
+                                color: isSelected
+                                    ? kAccent
+                                    : Colors.transparent,
                                 width: 2.5,
                               ),
                             ),
@@ -535,11 +594,16 @@ class _AppShellState extends State<AppShell> {
               onPressed: () {
                 final trimmed = name.text.trim();
                 if (trimmed.isEmpty) return;
-                final parsedAmount = double.tryParse(amount.text.replaceAll(' ', '')) ?? 0;
+                final parsedAmount =
+                    double.tryParse(amount.text.replaceAll(' ', '')) ?? 0;
                 widget.store.addProject(
                   name: trimmed,
-                  client: client.text.trim().isEmpty ? 'Client non renseigné' : client.text.trim(),
-                  location: location.text.trim().isEmpty ? 'Kinshasa' : location.text.trim(),
+                  client: client.text.trim().isEmpty
+                      ? 'Client non renseigné'
+                      : client.text.trim(),
+                  location: location.text.trim().isEmpty
+                      ? 'Kinshasa'
+                      : location.text.trim(),
                   contractAmount: parsedAmount,
                   status: status,
                   imageUrl: selectedCover,
@@ -581,12 +645,6 @@ class _AppShellState extends State<AppShell> {
                   ),
                 ),
                 for (final item in [
-                  (
-                    1,
-                    Icons.calendar_month_rounded,
-                    'Agenda',
-                    'Planning du chantier',
-                  ),
                   (4, Icons.groups_outlined, 'Personnes', 'Équipe et contacts'),
                   (
                     5,
@@ -785,10 +843,31 @@ class _NavigationRail extends StatelessWidget {
 }
 
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.label, this.actionLabel, this.onAdd});
+  const _Toolbar({
+    required this.label,
+    this.actionLabel,
+    this.onAdd,
+    this.store,
+  });
   final String label;
   final String? actionLabel;
   final VoidCallback? onAdd;
+  final LocalStore? store;
+
+  /// Sous-titre du bandeau : rappelle en permanence si les donnees viennent du
+  /// serveur ou du cache local, pour ne jamais confondre les deux.
+  String get _subtitle {
+    final current = store;
+    if (current == null) return 'Alliya Kalenda · espace de travail';
+    return switch (current.status) {
+      SyncStatus.loading => 'Synchronisation en cours…',
+      SyncStatus.ready => 'Synchronisé · ${current.userEmail ?? 'API'}',
+      SyncStatus.error => 'Erreur · ${current.errorMessage ?? 'sync'}',
+      SyncStatus.unauthenticated => 'Non connecte',
+      SyncStatus.unconfigured => 'API non configuree',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -829,8 +908,8 @@ class _Toolbar extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 1),
-                    const Text(
-                      'Alliya Kalenda · espace de travail',
+                    Text(
+                      _subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -931,6 +1010,43 @@ class _Avatar extends StatelessWidget {
   }
 }
 
+class _DashboardHeader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Dashboard',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: kNavy,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Voici la vue d’ensemble de vos chantiers aujourd’hui.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: 12),
+      Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: kAccent.withValues(alpha: .1),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Icon(Icons.dashboard_rounded, color: kAccent, size: 21),
+      ),
+    ],
+  );
+}
+
 class DashboardPage extends StatelessWidget {
   const DashboardPage({
     required this.store,
@@ -947,6 +1063,10 @@ class DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
+      _DashboardHeader(),
+      const SizedBox(height: 16),
+      AnimatedReveal(child: _Stats(store: store)),
+      const SizedBox(height: 14),
       if (store.projects.isNotEmpty) ...[
         AnimatedReveal(
           child: _DashboardHero(
@@ -954,8 +1074,14 @@ class DashboardPage extends StatelessWidget {
             onOpenProjects: onProjects,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
       ],
+      _QuickActions(
+        onProjects: onProjects,
+        onMessages: onMessages,
+        onAgenda: onAgenda,
+      ),
+      const SizedBox(height: 14),
       AnimatedReveal(
         delay: const Duration(milliseconds: 80),
         child: _Panel(
@@ -970,15 +1096,6 @@ class DashboardPage extends StatelessWidget {
           ],
         ),
       ),
-      const SizedBox(height: 12),
-      _QuickActions(
-        onProjects: onProjects,
-        onMessages: onMessages,
-        onAgenda: onAgenda,
-      ),
-      const SizedBox(height: 14),
-      AnimatedReveal(child: _Stats(store: store)),
-      const SizedBox(height: 16),
       AnimatedReveal(
         delay: const Duration(milliseconds: 160),
         child: _CompactPanel(

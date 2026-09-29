@@ -18,6 +18,10 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
 
   const payload = verifyToken(header.slice("Bearer ".length).trim());
   if (!payload) return next(unauthorized("Token invalide ou expiré"));
+  // Un refresh token ne doit jamais autoriser un appel API.
+  if (payload.type !== "access") {
+    return next(unauthorized("Refresh token non accepté ici"));
+  }
 
   req.user = { id: payload.sub, email: payload.email };
   next();

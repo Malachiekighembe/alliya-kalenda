@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ProjectStatus } from "@/lib/demo-data";
+import { ProjectStatus } from "@/lib/types";
 import { useKalenda } from "@/context/kalenda-context";
 
 const covers = [

@@ -1,98 +1,92 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  demoConversations,
-  demoMessages,
-  type ChatMessage,
-} from "@/lib/demo-data";
+import { useKalenda } from "@/context/kalenda-context";
 import { clockLabel } from "@/lib/format";
 
 export default function MessagesPage() {
-  const [activeId, setActiveId] = useState(demoConversations[0].id);
+  const { conversations, messages, sendMessage, openConversation, status } =
+    useKalenda();
+
+  const [activeId, setActiveId] = useState(conversations[0]?.id ?? "");
+  const [conversationOpen, setConversationOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
-  const [extra, setExtra] = useState<ChatMessage[]>([]);
-  const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const active =
-    demoConversations.find((conversation) => conversation.id === activeId) ??
-    demoConversations[0];
+    conversations.find((conversation) => conversation.id === activeId) ??
+    conversations[0];
+
+  // Le fil complet est charge a l'ouverture quand l'API est joignable.
+  useEffect(() => {
+    if (activeId) void openConversation(activeId);
+    // Volontairement limite a l'ouverture : le store est mis a jour en place.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
 
   const visibleConversations = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const filtered = needle
-      ? demoConversations.filter(
+      ? conversations.filter(
           (conversation) =>
             conversation.title.toLowerCase().includes(needle) ||
             conversation.projectName.toLowerCase().includes(needle),
         )
-      : demoConversations;
+      : conversations;
     // Non-lus d'abord, comme sur mobile.
     return [...filtered].sort((a, b) => b.unread - a.unread);
-  }, [search]);
+  }, [conversations, search]);
 
   const conversationMessages = useMemo(
     () =>
-      [...demoMessages, ...extra]
+      messages
         .filter((message) => message.conversationId === activeId)
         .sort((a, b) => a.sentAt.localeCompare(b.sentAt)),
-    [activeId, extra],
+    [activeId, messages],
   );
 
   // Auto-scroll en bas à chaque changement de conversation / nouveau message.
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [activeId, conversationMessages.length, typing]);
+  }, [activeId, conversationMessages.length]);
 
   const send = () => {
     const body = draft.trim();
-    if (!body) return;
+    if (!body || !active) return;
     setDraft("");
-    const message: ChatMessage = {
-      id: `local-${Date.now()}`,
-      conversationId: activeId,
-      body,
+
+    // Le message part sur l'API ; le store remplace l'entree provisoire par la
+    // ligne serveur des la reponse.
+    sendMessage({
+      conversationId: active.id,
       projectName: active.projectName,
-      sentAt: new Date().toISOString(),
-      isMine: true,
-      attachmentNames: [],
-    };
-    setExtra((current) => [...current, message]);
-    // Réponse simulée : l'interlocuteur écrit puis répond.
-    setTyping(true);
-    window.setTimeout(() => {
-      setTyping(false);
-      setExtra((current) => [
-        ...current,
-        {
-          id: `echo-${Date.now()}`,
-          conversationId: activeId,
-          body: "Bien noté, je m’en occupe et je reviens vers vous rapidement.",
-          projectName: active.projectName,
-          sentAt: new Date().toISOString(),
-          isMine: false,
-          attachmentNames: [],
-        },
-      ]);
-    }, 1600);
+      body,
+    });
   };
+
+  if (!active) {
+    return (
+      <div className="mx-auto max-w-6xl rounded-2xl border border-card-border bg-white p-6 text-center text-sm text-navy/60">
+        {status === "loading" ? "Chargement des discussions…" : "Aucune discussion."}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-6.5rem)] max-w-6xl flex-col overflow-hidden rounded-2xl border border-card-border bg-white lg:h-[calc(100dvh-4rem)]">
       <div className="grid h-full grid-cols-1 lg:grid-cols-[340px_1fr]">
         <aside
           className={`flex min-h-0 flex-col border-card-border lg:border-r ${
-            activeId ? "hidden lg:flex" : "flex"
+            conversationOpen ? "hidden lg:flex" : "flex"
           }`}
         >
           <header className="border-b border-card-border px-4 py-3.5">
             <div className="flex items-center justify-between">
               <h1 className="text-lg font-extrabold text-navy">Équipe</h1>
               <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-bold text-accent">
-                {demoConversations.reduce((sum, c) => sum + c.unread, 0)} non
+                {conversations.reduce((sum, c) => sum + c.unread, 0)} non
                 lus
               </span>
             </div>
@@ -106,7 +100,7 @@ export default function MessagesPage() {
 
           <ul className="min-h-0 flex-1 divide-y divide-card-border overflow-y-auto">
             {visibleConversations.map((conversation) => {
-              const last = [...demoMessages, ...extra]
+              const last = messages
                 .filter((message) => message.conversationId === conversation.id)
                 .sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0];
               const isActive = conversation.id === activeId;
@@ -114,7 +108,10 @@ export default function MessagesPage() {
                 <li key={conversation.id}>
                   <button
                     type="button"
-                    onClick={() => setActiveId(conversation.id)}
+                    onClick={() => {
+                      setActiveId(conversation.id);
+                      setConversationOpen(true);
+                    }}
                     className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
                       isActive ? "bg-accent/5" : "hover:bg-app"
                     }`}
@@ -159,15 +156,30 @@ export default function MessagesPage() {
           </ul>
         </aside>
 
-        <section className="flex min-h-0 flex-col">
+        <section
+          className={`min-h-0 flex-col ${
+            conversationOpen ? "flex" : "hidden lg:flex"
+          }`}
+        >
           <header className="flex items-center gap-3 border-b border-card-border px-4 py-3">
             <button
               type="button"
-              onClick={() => setActiveId("")}
-              className="rounded-lg p-1.5 text-navy/60 transition-colors hover:bg-app hover:text-navy lg:hidden"
+              onClick={() => setConversationOpen(false)}
+              className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-navy/65 transition-colors hover:bg-app hover:text-navy active:scale-95 lg:hidden"
               aria-label="Retour aux conversations"
             >
-              ←
+              <svg
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
             </button>
             <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">
               {active.initials}
@@ -255,21 +267,6 @@ export default function MessagesPage() {
                 </div>
               );
             })}
-            {typing ? (
-              <div className="bubble-in flex justify-start">
-                <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-card-border bg-white px-3.5 py-3 shadow-sm">
-                  <span className="typing-dot h-1.5 w-1.5 rounded-full bg-navy/60" />
-                  <span
-                    className="typing-dot h-1.5 w-1.5 rounded-full bg-navy/60"
-                    style={{ animationDelay: "150ms" }}
-                  />
-                  <span
-                    className="typing-dot h-1.5 w-1.5 rounded-full bg-navy/60"
-                    style={{ animationDelay: "300ms" }}
-                  />
-                </div>
-              </div>
-            ) : null}
           </div>
 
           {/* COMPOSER */}
@@ -278,7 +275,7 @@ export default function MessagesPage() {
               <button
                 type="button"
                 aria-label="Joindre un fichier"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-card-border bg-white text-navy/60 transition-all hover:border-accent hover:text-accent active:scale-95"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-card-border bg-white text-navy/60 transition-all hover:border-accent hover:text-accent active:scale-95"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -292,7 +289,7 @@ export default function MessagesPage() {
                   <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </svg>
               </button>
-              <div className="flex min-h-10 flex-1 items-center rounded-2xl border border-card-border bg-white px-4 transition-colors focus-within:border-accent">
+              <div className="flex min-h-11 flex-1 items-center rounded-2xl border border-card-border bg-white px-4 transition-colors focus-within:border-accent">
                 <input
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -312,7 +309,7 @@ export default function MessagesPage() {
                 onClick={send}
                 disabled={!draft.trim()}
                 aria-label="Envoyer"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy text-white transition-all hover:bg-accent active:scale-95 disabled:cursor-not-allowed disabled:bg-navy/30"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy text-white transition-all hover:bg-accent active:scale-95 disabled:cursor-not-allowed disabled:bg-navy/30"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -329,7 +326,7 @@ export default function MessagesPage() {
               </button>
             </div>
             <p className="mt-1.5 pl-12 text-[10px] text-navy/40">
-              Entrée pour envoyer · démo locale (aucun serveur)
+              Entrée pour envoyer · messages enregistrés sur le serveur
             </p>
           </footer>
         </section>

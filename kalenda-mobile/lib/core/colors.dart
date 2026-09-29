@@ -7,3 +7,6 @@ const kAmber = Color(0xffe8893c);
 const kAppBackground = Color(0xfff4f7fa);
 const kCardBorder = Color(0xffe3eaf1);
 const kSurfaceHigh = Color(0xffe8eef4);
+
+/// Very light neutral used for chat canvases and input fills.
+const kSurfaceLow = Color(0xfff7fafc);

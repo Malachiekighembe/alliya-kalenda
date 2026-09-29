@@ -9,6 +9,12 @@ const schema = z.object({
   JWT_ACCESS_TTL: z.string().min(1).default("15m"),
   JWT_REFRESH_TTL: z.string().min(1).default("7d"),
   CORS_ORIGIN: z.string().min(1).default("http://localhost:3000"),
+  /**
+   * Client ID de la console Google Cloud (type « Application Web » pour le
+   * Web Next.js, « Android » pour l'app mobile). Vide = connexion Google
+   * desactivee, les autres methods restent operationnelles.
+   */
+  GOOGLE_CLIENT_ID: z.string().optional(),
 });
 
 export const config = schema.parse(process.env);

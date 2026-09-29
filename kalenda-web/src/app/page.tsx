@@ -1,13 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { deadlineHint, formatDate, money } from "@/lib/format";
-import {
-  demoActivities,
-  demoConversations,
-  demoPayments,
-  demoProjects,
-  demoTotalExpenses,
-  projectStatusLabels,
-} from "@/lib/demo-data";
+import { projectStatusLabels, type Project } from "@/lib/types";
+import { useKalenda } from "@/context/kalenda-context";
 import { Counter } from "@/components/counter";
 import { Progress } from "@/components/progress";
 import { Reveal } from "@/components/reveal";
@@ -41,15 +37,25 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const activeProjects = demoProjects.filter((p) => p.status === "active");
-  const totalReceived = demoPayments.reduce((sum, p) => sum + p.amount, 0);
-  const hero = activeProjects[0] ?? demoProjects[0];
-  const upcoming = [...demoProjects]
+  const { projects, activities, payments, conversations, finances } =
+    useKalenda();
+
+  const activeProjects = projects.filter((p) => p.status === "active");
+  const hero = activeProjects[0] ?? projects[0];
+  const upcoming = [...projects]
     .sort(
       (a, b) =>
         new Date(a.plannedEnd).getTime() - new Date(b.plannedEnd).getTime(),
     )
     .slice(0, 3);
+
+  if (!hero) {
+    return (
+      <div className="mx-auto max-w-6xl rounded-2xl border border-card-border bg-white p-6 text-center text-sm text-navy/60">
+        Aucun chantier pour le moment. Ajoutez un projet pour démarrer.
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -65,26 +71,26 @@ export default function DashboardPage() {
           label="Projets actifs"
           value={activeProjects.length}
           format="int"
-          hint={`sur ${demoProjects.length} projets`}
+          hint={`sur ${projects.length} projets`}
           delay={0}
         />
         <StatCard
           label="Encaissé"
-          value={totalReceived}
+          value={finances.received}
           format="compact"
           hint="ce mois-ci"
           delay={70}
         />
         <StatCard
           label="Dépenses"
-          value={demoTotalExpenses}
+          value={finances.spent}
           format="compact"
           hint="ce mois-ci"
           delay={140}
         />
         <StatCard
           label="Activités"
-          value={demoActivities.length}
+          value={activities.length}
           format="int"
           hint="prévues aujourd’hui"
           delay={210}
@@ -129,8 +135,11 @@ export default function DashboardPage() {
               Activités du jour
             </h3>
             <ul className="mt-3 flex flex-col gap-3">
-              {demoActivities.map((activity) => (
-                <li key={activity.title} className="flex items-start gap-3">
+              {activities.map((activity, index) => (
+                <li
+                  key={`${activity.title}-${index}`}
+                  className="flex items-start gap-3"
+                >
                   <span className="mt-1 w-11 shrink-0 text-xs font-bold text-accent">
                     {activity.time}
                   </span>
@@ -155,7 +164,7 @@ export default function DashboardPage() {
               Progression des projets
             </h3>
             <ul className="mt-3 flex flex-col gap-3">
-              {demoProjects.slice(0, 4).map((project) => (
+              {projects.slice(0, 4).map((project: Project) => (
                 <li key={project.id} className="flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -227,7 +236,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             <ul className="mt-3 flex flex-col gap-3">
-              {demoConversations
+              {conversations
                 .filter((conversation) => conversation.unread > 0)
                 .map((conversation) => (
                   <li
@@ -261,9 +270,9 @@ export default function DashboardPage() {
             Paiements récents
           </h3>
           <ul className="mt-3 flex flex-col divide-y divide-card-border">
-            {demoPayments.map((payment) => (
+            {payments.map((payment, index) => (
               <li
-                key={`${payment.project}-${payment.date}`}
+                key={`${payment.project}-${payment.date}-${index}`}
                 className="flex items-center justify-between gap-3 py-2 text-sm transition-colors hover:bg-surface-low"
               >
                 <div className="min-w-0">

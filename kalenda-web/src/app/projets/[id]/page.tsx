@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useKalenda } from "@/context/kalenda-context";
 import { money, formatDate, deadlineHint, initials } from "@/lib/format";
-import { projectStatusLabels, ProjectStatus } from "@/lib/demo-data";
+import { projectStatusLabels, ProjectStatus } from "@/lib/types";
 import { Progress } from "@/components/progress";
 import { Reveal } from "@/components/reveal";
 

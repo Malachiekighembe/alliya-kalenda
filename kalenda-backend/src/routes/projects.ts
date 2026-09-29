@@ -16,6 +16,15 @@ const projectStatus = z.enum([
   "cancelled",
 ]);
 
+/**
+ * Express 5 type `req.params.id` en `string | string[]`. Cette fonction renvoie
+ * toujours une chaîne pour les paramètres d'route simples (`:id`).
+ */
+function paramId(req: { params: Record<string, string | string[] | undefined> }): string {
+  const value = req.params.id;
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+}
+
 const createSchema = z.object({
   name: z.string().min(1),
   reference: z.string().default(""),
@@ -71,7 +80,7 @@ projectsRouter.post("/", validateBody(createSchema), async (req, res, next) => {
 projectsRouter.get("/:id", async (req, res, next) => {
   try {
     const project = await prisma().project.findFirst({
-      where: { id: req.params.id, ownerId: req.user!.id },
+      where: { id: paramId(req), ownerId: req.user!.id },
       include: { phases: { orderBy: { position: "asc" } } },
     });
     if (!project) throw notFound("Projet introuvable.");
@@ -89,7 +98,7 @@ projectsRouter.patch(
     try {
       const { plannedEndDate, ...data } = req.body;
       const result = await prisma().project.updateMany({
-        where: { id: req.params.id, ownerId: req.user!.id },
+        where: { id: paramId(req), ownerId: req.user!.id },
         data: {
           ...data,
           ...(plannedEndDate ? { plannedEndDate: new Date(plannedEndDate) } : {}),
@@ -97,7 +106,7 @@ projectsRouter.patch(
       });
       if (result.count === 0) throw notFound("Projet introuvable.");
       const project = await prisma().project.findUnique({
-        where: { id: req.params.id },
+        where: { id: paramId(req) },
       });
       res.json(project);
     } catch (error) {
@@ -110,7 +119,7 @@ projectsRouter.patch(
 projectsRouter.delete("/:id", async (req, res, next) => {
   try {
     const result = await prisma().project.deleteMany({
-      where: { id: req.params.id, ownerId: req.user!.id },
+      where: { id: paramId(req), ownerId: req.user!.id },
     });
     if (result.count === 0) throw notFound("Projet introuvable.");
     res.status(204).end();
